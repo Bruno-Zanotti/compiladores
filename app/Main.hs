@@ -26,8 +26,8 @@ import System.IO ( stderr, hPutStr )
 import Global ( GlEnv(..) )
 import Errors
 import Lang
-import Parse ( P, tm, program, declOrTm, runP )
-import Elab ( elab, elab_decl )
+import Parse ( P, stm, program, declOrSTm, runP )
+import Elab ( elab, elab_decl, desugarDecl, elab' )
 import Eval ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
@@ -82,12 +82,13 @@ parseIO filename p x = case runP p x filename of
                   Left e  -> throwError (ParseErr e)
                   Right r -> return r
 
-handleDecl ::  MonadPCF m => Decl NTerm -> m ()
-handleDecl (Decl p x t) = do
-        let tt = elab t
-        tcDecl (Decl p x tt)    
+handleDecl ::  MonadPCF m => SDecl SNTerm -> m ()
+handleDecl d = do
+        let Decl p' x' b' = desugarDecl d
+        let tt = elab' b'
+        tcDecl (Decl p' x' tt)
         te <- eval tt
-        addDecl (Decl p x te)
+        addDecl (Decl p' x' te)
 
 data Command = Compile CompileForm
              | Print String
@@ -164,12 +165,12 @@ handleCommand cmd = do
 compilePhrase ::  MonadPCF m => String -> m ()
 compilePhrase x =
   do
-    dot <- parseIO "<interactive>" declOrTm x
+    dot <- parseIO "<interactive>" declOrSTm x
     case dot of 
       Left d  -> handleDecl d
       Right t -> handleTerm t
 
-handleTerm ::  MonadPCF m => NTerm -> m ()
+handleTerm ::  MonadPCF m => SNTerm -> m ()
 handleTerm t = do
          let tt = elab t
          s <- get
@@ -180,11 +181,11 @@ handleTerm t = do
 printPhrase   :: MonadPCF m => String -> m ()
 printPhrase x =
   do
-    x' <- parseIO "<interactive>" tm x
+    x' <- parseIO "<interactive>" stm x
     let ex = elab x'
     t  <- case x' of 
-           (V p f) -> maybe ex id <$> lookupDecl f
-           _       -> return ex  
+           (SV p f) -> maybe ex id <$> lookupDecl f
+           _        -> return ex  
     printPCF "NTerm:"
     printPCF (show x')
     printPCF "\nTerm:"
@@ -192,7 +193,7 @@ printPhrase x =
 
 typeCheckPhrase :: MonadPCF m => String -> m ()
 typeCheckPhrase x = do
-         t <- parseIO "<interactive>" tm x
+         t <- parseIO "<interactive>" stm x
          let tt = elab t
          s <- get
          ty <- tc tt (tyEnv s)
