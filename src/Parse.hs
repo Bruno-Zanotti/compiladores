@@ -79,18 +79,17 @@ typeP = try (do
 const :: P Const
 const = CNat <$> num
 
+unaryOpName :: P UnaryOp
+unaryOpName =
+      (reserved "succ" >> return Succ)
+  <|> (reserved "pred" >> return Pred)
+
 unaryOp :: P SNTerm
 unaryOp = do
   i <- getPos
-  foldr (\(w, r) rest -> try (do 
-                                 reserved w
-                                 a <- atom
-                                 return (r a)) <|> rest) parserZero (mapping i)
-  where
-   mapping i = [
-       ("succ", SUnaryOp i Succ),
-       ("pred", SUnaryOp i Pred)
-    ]
+  o <- unaryOpName
+  a <- atom
+  return (SUnaryOp i o a)
 
 atom :: P SNTerm
 atom = (flip SConst <$> const <*> getPos)

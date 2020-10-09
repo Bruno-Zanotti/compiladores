@@ -52,12 +52,11 @@ tc (App p t u) bs = do
 tc (Fix p f fty x xty t) bs = do
          (dom, cod) <- domCod (V p (Free f)) fty
          when (dom /= xty) $ do
-           failPosPCF p "El tipo del argumento de un fixpoint debe coincidir con el \
-                        \dominio del tipo de la función"
-         ty' <- tc (openN [f, x] t) ((x,xty):(f,fty):bs)
-         expect cod ty' t
+           failPosPCF p "El tipo del argumento de un fixpoint debe coincidir con el dominio del tipo de la función"
+         let t' = openN [f, x] t
+         ty' <- tc t' ((x,xty):(f,fty):bs)
+         expect cod ty' t'
          return fty
-
 
 -- | @'typeError' t s@ lanza un error de tipo para el término @t@ 
 typeError :: MonadPCF m => Term   -- ^ término que se está chequeando  
