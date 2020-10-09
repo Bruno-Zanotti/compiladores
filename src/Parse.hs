@@ -85,15 +85,25 @@ unaryOpName =
   <|> (reserved "pred" >> return Pred)
 
 unaryOp :: P SNTerm
-unaryOp = do
+unaryOp = try (unaryOpApp <|> unaryOpNotApp)
+
+unaryOpApp :: P SNTerm
+unaryOpApp = do
   i <- getPos
   o <- unaryOpName
   a <- atom
-  return (SUnaryOp i o a)
+  return (SUnaryOp i o (Just a))
+
+unaryOpNotApp :: P SNTerm
+unaryOpNotApp = do
+  i <- getPos
+  o <- unaryOpName
+  return (SUnaryOp i o Nothing)
 
 atom :: P SNTerm
 atom = (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
+       <|> unaryOpNotApp
        <|> parens stm
 
 lam :: P SNTerm

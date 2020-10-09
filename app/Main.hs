@@ -27,7 +27,7 @@ import Global ( GlEnv(..) )
 import Errors
 import Lang
 import Parse ( P, stm, program, declOrSTm, runP )
-import Elab ( elab, elab_decl, desugarDecl, elab' )
+import Elab ( elab, desugarDecl, elab' )
 import Eval ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF

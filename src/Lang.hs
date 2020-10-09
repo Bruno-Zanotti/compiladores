@@ -78,7 +78,7 @@ data STm info var =
   | SConst info Const
   | SLam info [(Name, Ty)] (STm info var)
   | SApp info (STm info var) (STm info var)
-  | SUnaryOp info UnaryOp (STm info var)
+  | SUnaryOp info UnaryOp (Maybe (STm info var))
   | SFix info Name Ty Name Ty (STm info var)
   | SIfZ info (STm info var) (STm info var) (STm info var)
   | SLet info Name [(Name, Ty)] Ty (STm info var) (STm info var)
