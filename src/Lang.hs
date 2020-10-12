@@ -24,7 +24,13 @@ import Common ( Pos )
 data Ty = 
       NatTy 
     | FunTy Ty Ty
-    | NamedTy Name Ty
+    deriving (Show,Eq)
+
+-- | AST de Tipos azucarados
+data STy = 
+      SNatTy 
+    | SFunTy STy STy
+    | SNamedTy Name
     deriving (Show,Eq)
 
 type Name = String
@@ -43,8 +49,9 @@ data Decl a =
 
 -- | tipo de datos de declaraciones azucaradas
 data SDecl a =
-    SDLet { sDeclPos :: Pos, sDeclName :: Name, sDeclBindings :: [(Name,Ty)], sDeclType :: Ty, sDeclBody :: a }
-  | SDRec { sDeclPos :: Pos, sDeclName :: Name, sDeclBindings :: [(Name,Ty)], sDeclType :: Ty, sDeclBody :: a }
+    SDLet  { sDeclPos :: Pos, sDeclName :: Name, sDeclBindings :: [(Name, STy)], sDeclType :: STy, sDeclBody :: a }
+  | SDRec  { sDeclPos :: Pos, sDeclName :: Name, sDeclBindings :: [(Name, STy)], sDeclType :: STy, sDeclBody :: a }
+  | SDType { sDeclPos :: Pos, sDeclName :: Name, sDeclType :: STy }
   | SEval a
   deriving (Show,Functor)
 
@@ -76,13 +83,13 @@ data Var =
 data STm info var = 
     SV info var
   | SConst info Const
-  | SLam info [(Name, Ty)] (STm info var)
+  | SLam info [(Name, STy)] (STm info var)
   | SApp info (STm info var) (STm info var)
   | SUnaryOp info UnaryOp (Maybe (STm info var))
-  | SFix info Name Ty Name Ty (STm info var)
+  | SFix info Name STy Name STy (STm info var)
   | SIfZ info (STm info var) (STm info var) (STm info var)
-  | SLet info Name [(Name, Ty)] Ty (STm info var) (STm info var)
-  | SRec info Name [(Name, Ty)] Ty (STm info var) (STm info var)
+  | SLet info Name [(Name, STy)] STy (STm info var) (STm info var)
+  | SRec info Name [(Name, STy)] STy (STm info var) (STm info var)
   deriving (Show, Functor)
 
 type SNTerm = STm Pos Name

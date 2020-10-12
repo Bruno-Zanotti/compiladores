@@ -27,7 +27,7 @@ import Global ( GlEnv(..) )
 import Errors
 import Lang
 import Parse ( P, stm, program, declOrSTm, runP )
-import Elab ( elab, desugarDecl, elab' )
+import Elab ( elab, desugarDecl, elab', desugarTy )
 import Eval ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
@@ -83,8 +83,12 @@ parseIO filename p x = case runP p x filename of
                   Right r -> return r
 
 handleDecl ::  MonadPCF m => SDecl SNTerm -> m ()
+handleDecl (SDType p n sty) = do 
+                        ty <- desugarTy sty
+                        addTy n ty
 handleDecl d = do
-        let Decl p' x' b' = desugarDecl d
+        d' <- desugarDecl d
+        let Decl p' x' b' = d'
         let tt = elab' b'
         tcDecl (Decl p' x' tt)
         te <- eval tt
@@ -172,7 +176,7 @@ compilePhrase x =
 
 handleTerm ::  MonadPCF m => SNTerm -> m ()
 handleTerm t = do
-         let tt = elab t
+         tt <- elab t
          s <- get
          ty <- tc tt (tyEnv s)
          te <- eval tt
@@ -182,7 +186,7 @@ printPhrase   :: MonadPCF m => String -> m ()
 printPhrase x =
   do
     x' <- parseIO "<interactive>" stm x
-    let ex = elab x'
+    ex <- elab x'
     t  <- case x' of 
            (SV p f) -> maybe ex id <$> lookupDecl f
            _        -> return ex  
@@ -194,7 +198,7 @@ printPhrase x =
 typeCheckPhrase :: MonadPCF m => String -> m ()
 typeCheckPhrase x = do
          t <- parseIO "<interactive>" stm x
-         let tt = elab t
+         tt <- elab t
          s <- get
          ty <- tc tt (tyEnv s)
          printPCF (ppTy ty)

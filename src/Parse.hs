@@ -28,7 +28,7 @@ lexer :: Tok.TokenParser u
 lexer = Tok.makeTokenParser $
         emptyDef {
          commentLine    = "#",
-         reservedNames = ["let", "in", "rec", "fun", "fix", "then", "else", "succ", "pred", "ifz", "Nat"],
+         reservedNames = ["let", "in", "rec", "fun", "fix", "then", "else", "succ", "pred", "ifz", "Nat", "type"],
          reservedOpNames = ["->",":","="]
         }
 
@@ -58,23 +58,30 @@ num :: P Int
 num = fromInteger <$> natural
 
 var :: P Name
-var = identifier 
+var = identifier
+
+tyvar :: P Name
+tyvar = Tok.lexeme lexer $ do
+          c  <- try (lookAhead upper)
+          cs <- option "" identifier
+          return (c:cs)
 
 getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
-tyatom :: P Ty
-tyatom = (reserved "Nat" >> return NatTy)
+tyatom :: P STy
+tyatom = (reserved "Nat" >> return SNatTy)
          <|> parens typeP
+         <|> (SNamedTy <$> tyvar)
 
-typeP :: P Ty
+typeP :: P STy
 typeP = try (do 
           x <- tyatom
           reservedOp "->"
           y <- typeP
-          return (FunTy x y))
-      <|> tyatom
+          return (SFunTy x y))
+      <|> tyatom 
           
 const :: P Const
 const = CNat <$> num
@@ -131,13 +138,13 @@ ifz = do i <- getPos
          e <- stm
          return (SIfZ i c t e)
 
-binding :: P (Name, Ty)
+binding :: P (Name, STy)
 binding = do v <- var
              reservedOp ":"
              ty <- typeP
              return (v, ty)
 
-binders :: P [(Name,Ty)]
+binders :: P [(Name, STy)]
 binders = many (parens binding) <|> return []
 
 fix :: P SNTerm
@@ -171,20 +178,32 @@ stm = app <|> lam <|> ifz <|> unaryOp <|> fix <|> letIn
 
 -- | Parser de declaraciones
 decl :: P (SDecl SNTerm)
-decl = do 
-     i <- getPos
-     reserved "let"
-     isRec <- (reserved "rec" >> return True ) <|> return False
-     v <- var
-     vs <- binders
-     reservedOp ":"
-     ty <- typeP
-     reservedOp "="
-     t <- stm
-     case isRec of
-       True -> return (SDRec i v vs ty t)
-       _    -> return (SDLet i v vs ty t)
+decl = declTerm <|> declTy
 
+declTerm :: P (SDecl SNTerm)
+declTerm = do 
+         i <- getPos
+         reserved "let"
+         isRec <- (reserved "rec" >> return True ) <|> return False
+         v <- var
+         vs <- binders
+         reservedOp ":"
+         ty <- typeP
+         reservedOp "="
+         t <- stm
+         case isRec of
+           True -> return (SDRec i v vs ty t)
+           _    -> return (SDLet i v vs ty t)
+
+declTy :: P (SDecl a)
+declTy = do
+       i <- getPos
+       reserved "type"
+       v <- tyvar
+       reservedOp "="
+       ty <- typeP
+       return (SDType i v ty)
+       
 -- | Parser de programas (listas de declaraciones)
 program :: P [SDecl SNTerm]
 program = many decl
