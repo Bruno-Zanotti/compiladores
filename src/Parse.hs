@@ -138,20 +138,29 @@ ifz = do i <- getPos
          e <- stm
          return (SIfZ i c t e)
 
-binding :: P (Name, STy)
-binding = do v <- var
+-- binding :: P (Name, STy)
+-- binding = do v <- var
+--              reservedOp ":"
+--              ty <- typeP
+--              return (v, ty)
+
+binding :: P [(Name, STy)]
+binding = do vs <- many1 var
              reservedOp ":"
              ty <- typeP
-             return (v, ty)
+             return (fmap (\v -> (v,ty)) vs)
 
 binders :: P [(Name, STy)]
-binders = many (parens binding) <|> return []
+-- binders = concat (many (parens binding)) <|> return []
+binders = do vs <- many (parens binding)
+             return (concat vs)
+          <|> return []
 
 fix :: P SNTerm
 fix = do i <- getPos
          reserved "fix"
-         (f, fty) <- parens binding
-         (x, xty) <- parens binding
+         [(f, fty)] <- parens binding
+         [(x, xty)] <- parens binding
          reservedOp "->"
          t <- stm
          return (SFix i f fty x xty t)
