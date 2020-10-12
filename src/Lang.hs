@@ -26,6 +26,13 @@ data Ty =
     | FunTy Ty Ty
     deriving (Show,Eq)
 
+-- | AST de Tipos azucarados
+data STy = 
+      SNatTy 
+    | SFunTy STy STy
+    | SNamedTy Name
+    deriving (Show,Eq)
+
 type Name = String
 
 data Const = CNat Int
@@ -38,6 +45,14 @@ data UnaryOp = Succ | Pred
 data Decl a =
     Decl { declPos :: Pos, declName :: Name, declBody :: a }
   | Eval a
+  deriving (Show,Functor)
+
+-- | tipo de datos de declaraciones azucaradas
+data SDecl a =
+    SDLet  { sDeclPos :: Pos, sDeclName :: Name, sDeclBindings :: [(Name, STy)], sDeclType :: STy, sDeclBody :: a }
+  | SDRec  { sDeclPos :: Pos, sDeclName :: Name, sDeclBindings :: [(Name, STy)], sDeclType :: STy, sDeclBody :: a }
+  | SDType { sDeclPos :: Pos, sDeclName :: Name, sDeclType :: STy }
+  | SEval a
   deriving (Show,Functor)
 
 -- | AST de los términos. 
@@ -61,6 +76,23 @@ data Var =
     Bound !Int
   | Free Name
   deriving Show
+
+-- | AST de los términos con azúcar sintáctico. 
+--   - info es información extra que puede llevar cada nodo. 
+--   - var es el tipo de la variables. Es 'Name' para fully named y 'Var' para locally closed. 
+data STm info var = 
+    SV info var
+  | SConst info Const
+  | SLam info [(Name, STy)] (STm info var)
+  | SApp info (STm info var) (STm info var)
+  | SUnaryOp info UnaryOp (Maybe (STm info var))
+  | SFix info Name STy Name STy (STm info var)
+  | SIfZ info (STm info var) (STm info var) (STm info var)
+  | SLet info Name [(Name, STy)] STy (STm info var) (STm info var)
+  | SRec info Name [(Name, STy)] STy (STm info var) (STm info var)
+  deriving (Show, Functor)
+
+type SNTerm = STm Pos Name
 
 -- | Obtiene la info en la raíz del término.
 getInfo :: Tm info var -> info
