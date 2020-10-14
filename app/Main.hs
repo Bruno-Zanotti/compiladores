@@ -28,7 +28,8 @@ import Errors
 import Lang
 import Parse ( P, stm, program, declOrSTm, runP )
 import Elab ( elab, desugarDecl, elab', desugarTy )
-import Eval ( eval )
+-- import Eval ( eval )
+import CEK ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
 import TypeChecker ( tc, tcDecl )
