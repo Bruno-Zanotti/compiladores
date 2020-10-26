@@ -8,7 +8,7 @@ Stability   : experimental
 
 -}
 
-module Parse (stm, Parse.parse, decl, runP, P, program, declOrSTm) where
+module Parse (stm, Parse.parse, decl, runP, P, program, declOrSTm, Mode(..), parseArgs ) where
 
 import Prelude hiding ( const )
 import Lang
@@ -17,6 +17,7 @@ import Text.Parsec hiding (runP)
 import Data.Char ( isNumber, ord )
 import qualified Text.Parsec.Token as Tok
 import Text.ParserCombinators.Parsec.Language ( GenLanguageDef(..), emptyDef )
+import qualified Options.Applicative as OptApp ( flag', flag, Parser, short, long, many, metavar, help, str, argument, (<|>) ) 
 
 type P = Parsec String ()
 
@@ -230,3 +231,20 @@ parse :: String -> SNTerm
 parse s = case runP stm s "" of
             Right t -> t
             Left e -> error ("no parse: " ++ show s)
+
+data Mode = Interactive
+            | Typecheck
+            | Bytecompile
+            | Run
+
+-- | Parser de banderas
+parseMode :: OptApp.Parser Mode
+parseMode =
+      OptApp.flag' Typecheck (OptApp.long "typecheck" <> OptApp.short 't' <> OptApp.help "Solo chequear tipos")
+  OptApp.<|> OptApp.flag' Bytecompile (OptApp.long "bytecompile" <> OptApp.short 'c' <> OptApp.help "Compilar a la BVM")
+  OptApp.<|> OptApp.flag' Run (OptApp.long "run" <> OptApp.short 'r' <> OptApp.help "Ejecutar bytecode en la BVM")
+  OptApp.<|> OptApp.flag Interactive Interactive (OptApp.long "interactive" <> OptApp.short 'i' <> OptApp.help "Ejecutar en forma interactiva" )
+
+-- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
+parseArgs :: OptApp.Parser (Mode,[FilePath])
+parseArgs = (,) <$> parseMode <*> OptApp.many (OptApp.argument OptApp.str (OptApp.metavar "FILES..."))

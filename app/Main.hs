@@ -26,21 +26,38 @@ import System.IO ( stderr, hPutStr )
 import Global ( GlEnv(..) )
 import Errors
 import Lang
-import Parse ( P, stm, program, declOrSTm, runP )
+import Parse ( P, stm, program, declOrSTm, runP, Mode(..), parseArgs )
 import Elab ( elab, desugarDecl, elab', desugarTy )
 -- import Eval ( eval )
 import CEK ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
 import TypeChecker ( tc, tcDecl )
+import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
+import Bytecompile
+import Common ( dropExtension )
 
 prompt :: String
 prompt = "PCF> "
 
 main :: IO ()
-main = do args <- getArgs
-          runPCF (runInputT defaultSettings (main' args))
-          return ()
+main = execParser opts >>= go
+  where 
+    opts = info (parseArgs <**> helper) 
+           (fullDesc 
+           <> progDesc "Compilador de PCF" 
+           <> header "Compilador de PCF de la materia Compiladores 2020")
+    go :: (Mode,[FilePath]) -> IO ()
+    go (Interactive,files) =
+        do runPCF (runInputT defaultSettings (main' files))
+           return ()
+    go (Typecheck, files) = undefined
+    go (Bytecompile, files) = 
+        do bytecode <- mapM bcRead files
+           let filenames = map (\x -> dropExtension x ++ ".byte") files
+           mapM (uncurry bcWrite) (zip bytecode filenames)
+           return ()
+    go (Run,files) = undefined
           
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
 main' args = do
