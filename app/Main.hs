@@ -52,12 +52,12 @@ main = execParser opts >>= go
         do runPCF (runInputT defaultSettings (main' files))
            return ()
     go (Typecheck, files) = undefined
-    go (Bytecompile, files) = 
-        do bytecode <- mapM bcRead files
-           let filenames = map (\x -> dropExtension x ++ ".byte") files
-           mapM (uncurry bcWrite) (zip bytecode filenames)
-           return ()
-    go (Run,files) = undefined
+    go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
+                                 return ()
+    go (Run,files) = do
+      bytecode <- mapM bcRead files 
+      runPCF $ catchErrors $ (mapM runBC bytecode)
+      return ()
           
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
 main' args = do
@@ -76,6 +76,29 @@ main' args = do
                        c <- liftIO $ interpretCommand x
                        b <- lift $ catchErrors $ handleCommand c
                        maybe loop (flip when loop) b
+
+byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
+byteCompileFiles []     = return ()
+byteCompileFiles (x:xs) = do
+        -- modify (\s -> s { lfile = x, inter = False })
+        byteCompileFile x
+        byteCompileFiles xs
+
+-- TODO: unificar con funcion CompileFile
+byteCompileFile :: MonadPCF m => FilePath -> m ()
+byteCompileFile f = do
+    printPCF ("Abriendo "++f++"...")
+    let filename = reverse(dropWhile isSpace (reverse f))
+    x <- liftIO $ catch (readFile filename)
+               (\e -> do let err = show (e :: IOException)
+                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
+                         return "")
+    decls <- parseIO filename program x
+    mapM handleDecl decls
+    bytecode <- bytecompileModule decls
+    let outputFile = dropExtension filename ++ ".byte"
+    printPCF ("Generando archivo compilado "++outputFile++"...")
+    liftIO $ bcWrite bytecode outputFile
  
 compileFiles ::  MonadPCF m => [String] -> m ()
 compileFiles []     = return ()

@@ -16,6 +16,7 @@ module Bytecompile
 import Lang 
 import Subst
 import MonadPCF
+import Elab (desugarDecl, elab')
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
@@ -66,10 +67,35 @@ pattern DROP     = 13
 pattern PRINT    = 14
 
 bc :: MonadPCF m => Term -> m Bytecode
-bc t = error "implementame"
+bc (V _ (Bound n))     = return [ACCESS, n]
+bc (Const _ (CNat n))  = return [CONST, n]
+bc (Lam _ _ _ t)       = do bt <- bc t
+                            return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN])
+bc (App _ f e)         = do btf <- bc f
+                            bte <- bc e
+                            return (btf ++ bte ++ [CALL])
+bc (UnaryOp _ Succ t)  = do bt <- bc t
+                            return (bt ++ [SUCC]) 
+bc (UnaryOp _ Pred t)  = do bt <- bc t
+                            return (bt ++ [PRED])
+bc (Fix _ _ _ _ _ t)   = do bt <- bc t
+                            return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN, FIX])
+bc (IfZ _ c t f)       = do btc <- bc c
+                            btt <- bc t
+                            btf <- bc f
+                            let args = [IFZ] ++ (length btt: btt) ++ (length btf: btf)
+                            return ([FUNCTION, length args + 1] ++ args ++ [RETURN] ++ btc ++ [CALL])
 
-bytecompileModule :: MonadPCF m => [Decl Term] -> m Bytecode
-bytecompileModule mod = error "implementame"
+bytecompileModule :: MonadPCF m => [SDecl SNTerm] -> m Bytecode
+bytecompileModule [] = return []
+bytecompileModule (sd:decls) = do
+                d <- desugarDecl sd
+                let Decl _ _ body = d
+                let term = elab' body
+                bytecode <- bc term
+                printPCF ("El Term es " ++ show(term) ++ "y su bytecode es " ++ show(bytecode))
+                bytecodes <- bytecompileModule decls
+                return (bytecode ++ bytecodes)
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo 
 bcWrite :: Bytecode -> FilePath -> IO ()
@@ -83,5 +109,42 @@ bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
 bcRead :: FilePath -> IO Bytecode
 bcRead filename = map fromIntegral <$> un32  <$> decode <$> BS.readFile filename
 
+data Val = 
+    I Int 
+  | Fun Env Bytecode
+  | RA Env Bytecode
+  deriving (Show)
+
+type Stack = [Val]
+type Env = [Val]
+
 runBC :: MonadPCF m => Bytecode -> m ()
-runBC c = error "implementame"
+runBC cs = runBC' (cs ++ [PRINT,STOP]) [] []
+
+runBC' :: MonadPCF m => Bytecode -> Env -> Stack -> m ()
+runBC' (CONST: n: cs) e s               = runBC' cs e (I n:s)
+runBC' (SUCC: cs) e (I n: s)            = runBC' cs e (I (n+1):s)
+runBC' (PRED: cs) e (I n: s)            = runBC' cs e (I (n-1):s)
+runBC' (ACCESS: i: cs) e s              = runBC' cs e (e!!i:s)
+runBC' (CALL: cs) e (v: (Fun ef cf): s) = runBC' cf (v:ef) ((RA e cs):s)
+runBC' (FUNCTION: l: cs) e s            = case (drop l cs) of
+                                            FIX:cs' -> runBC' cs' e ((Fun efix cf) :s)
+                                            cs'     -> runBC' cs' e ((Fun e cf):s)
+                                          where cf = (take l cs)
+                                                efix = Fun efix cf : e
+runBC' (RETURN: _) _  (v: (RA e c): s)  = runBC' c e (v:s)
+runBC' (IFZ: l: cs) (c:e) s = case c of
+                                I 0 -> runBC' (t ++ cs'') e s
+                                _   -> runBC' (f ++ cs'') e s
+                              where t = take l cs
+                                    (lf:cs') = drop l cs
+                                    f = take lf cs'
+                                    cs'' = drop lf cs'
+runBC' [STOP] _ _          = return ()
+runBC' (JUMP: _) _ _       = undefined
+runBC' (SHIFT: cs) e (v:s) = runBC' cs (v:e) s
+runBC' (DROP: cs) (_:e) s  = runBC' cs e s
+runBC' (PRINT: cs) e (n:s) = do
+                  printPCF ("El valor en el stack es: " ++ show(n))
+                  runBC' cs e (n:s)
+runBC' cs _ _ = printPCF ("SALIO MAL " ++ show(cs))
