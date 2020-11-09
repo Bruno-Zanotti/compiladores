@@ -51,7 +51,7 @@ main = execParser opts >>= go
     go (Interactive,files) =
         do runPCF (runInputT defaultSettings (main' files))
            return ()
-    go (Typecheck, files) = undefined
+    go (Typecheck, files) = undefined 
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
     go (Run,files) = do
@@ -95,10 +95,24 @@ byteCompileFile f = do
                          return "")
     decls <- parseIO filename program x
     mapM handleDecl decls
-    bytecode <- bytecompileModule decls
+    term <- declsToTerm decls
+    bytecode <- bytecompileModule term
     let outputFile = dropExtension filename ++ ".byte"
     printPCF ("Generando archivo compilado "++outputFile++"...")
     liftIO $ bcWrite bytecode outputFile
+
+declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
+declsToTerm (SDLet p n bs ty b:xs) = case xs of
+                                      [] -> return (SLet p n bs ty b (SV p n))
+                                      _  -> do ts <- declsToTerm xs
+                                               return (SLet p n bs ty b ts)
+declsToTerm (SDRec p n bs ty b:xs) = case xs of
+                                      [] -> return (SRec p n bs ty b (SV p n))
+                                      _  -> do ts <- declsToTerm xs
+                                               return (SRec p n bs ty b ts)
+declsToTerm (x:_) = do failPCF $ "Declaración invalida "++show(x)
+
+-- declsToTerm ((SDRec p n bs ty b):xs) = SRec p n bs ty b (declsToTerm xs)
  
 compileFiles ::  MonadPCF m => [String] -> m ()
 compileFiles []     = return ()

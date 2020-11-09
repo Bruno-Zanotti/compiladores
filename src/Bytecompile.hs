@@ -16,7 +16,7 @@ module Bytecompile
 import Lang 
 import Subst
 import MonadPCF
-import Elab (desugarDecl, elab')
+import Elab (elab)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
@@ -89,16 +89,11 @@ bc (Let _ f ty t1 t2)  = do bt1 <- bc t1
                             bt2 <- bc t2
                             return (bt1 ++ [SHIFT] ++ bt2 ++ [DROP])
 
-bytecompileModule :: MonadPCF m => [SDecl SNTerm] -> m Bytecode
-bytecompileModule [] = return []
-bytecompileModule (sd:decls) = do
-                d <- desugarDecl sd
-                let Decl _ _ body = d
-                let term = elab' body
-                bytecode <- bc term
-                printPCF ("El Term es " ++ show(term) ++ "y su bytecode es " ++ show(bytecode))
-                bytecodes <- bytecompileModule decls
-                return (bytecode ++ bytecodes)
+bytecompileModule :: MonadPCF m => SNTerm -> m Bytecode
+bytecompileModule st = do
+                t <- elab st
+                bytecode <- bc t
+                return bytecode
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo 
 bcWrite :: Bytecode -> FilePath -> IO ()
