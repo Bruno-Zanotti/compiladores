@@ -18,7 +18,7 @@ import Lang
       Var(Free),
       Term,
       NTerm,
-      Tm(Lam, V, Const, UnaryOp, Fix, IfZ, App),
+      Tm(Lam, V, Const, UnaryOp, Fix, IfZ, App, Let),
       Decl(Decl),
       Ty(NatTy, FunTy),
       STy(SNatTy, SFunTy, SNamedTy),
@@ -37,6 +37,7 @@ elab' (App p h a)           = App p (elab' h) (elab' a)
 elab' (Fix p f fty x xty t) = Fix p f fty x xty (closeN [f, x] (elab' t))
 elab' (IfZ p c t e)         = IfZ p (elab' c) (elab' t) (elab' e)
 elab' (UnaryOp i o t)       = UnaryOp i o (elab' t)
+elab' (Let p f ty t1 t2)    = Let p f ty (elab' t1) (close f (elab' t2))
 
 elab :: MonadPCF m => SNTerm -> m Term
 elab st = do
@@ -54,7 +55,9 @@ desugar (SUnaryOp p o Nothing)              = desugar(SLam p [("x", SNatTy)] (SU
 desugar (SUnaryOp p o (Just st))            = UnaryOp p o <$> desugar st
 desugar (SFix p f fty x xty st)             = Fix p f <$> desugarTy fty <*> return x <*> desugarTy xty <*> desugar st
 desugar (SIfZ p st1 st2 st3)                = IfZ p <$> desugar st1 <*> desugar st2 <*> desugar st3
-desugar (SLet p f [] ty st1 st2)            = App p <$> (Lam p f <$> desugarTy ty <*> desugar st2) <*> desugar st1
+-- desugar (SLet p f [] ty st1 st2)            = App p <$> (Lam p f <$> desugarTy ty <*> desugar st2) <*> desugar st1
+-- desugar (SLet p f ((x, xty):xs) ty st1 st2) = desugar (SLet p f xs (SFunTy xty ty) (SLam p [(x, xty)] st1) st2) 
+desugar (SLet p f [] ty st1 st2)            = Let p f <$> desugarTy ty <*> desugar st1 <*> desugar st2
 desugar (SLet p f ((x, xty):xs) ty st1 st2) = desugar (SLet p f xs (SFunTy xty ty) (SLam p [(x, xty)] st1) st2) 
 desugar (SRec p f [(x, xty)] ty st1 st2)    = desugar (SLet p f [] (SFunTy xty ty) (SFix p f (SFunTy xty ty) x xty st1) st2) 
 desugar (SRec p f (x:xs) ty st1 st2)        = desugar (SRec p f [x] (SFunTy (getType xs) ty) (SLam p xs st1) st2)

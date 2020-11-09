@@ -85,6 +85,9 @@ bc (IfZ _ c t f)       = do btc <- bc c
                             btf <- bc f
                             let args = [IFZ] ++ (length btt: btt) ++ (length btf: btf)
                             return ([FUNCTION, length args + 1] ++ args ++ [RETURN] ++ btc ++ [CALL])
+bc (Let _ f ty t1 t2)  = do bt1 <- bc t1
+                            bt2 <- bc t2
+                            return (bt1 ++ [SHIFT] ++ bt2 ++ [DROP])
 
 bytecompileModule :: MonadPCF m => [SDecl SNTerm] -> m Bytecode
 bytecompileModule [] = return []
@@ -147,4 +150,4 @@ runBC' (DROP: cs) (_:e) s  = runBC' cs e s
 runBC' (PRINT: cs) e (n:s) = do
                   printPCF ("El valor en el stack es: " ++ show(n))
                   runBC' cs e (n:s)
-runBC' cs _ _ = printPCF ("SALIO MAL " ++ show(cs))
+runBC' cs _ _ = printPCF ("Error en Compilación a Bytecode " ++ show(cs))
