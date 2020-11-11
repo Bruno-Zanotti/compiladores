@@ -12,4 +12,5 @@ app/Main
 *.blg
 *.bbl
 compiladores.cabal
+*.byte
 
