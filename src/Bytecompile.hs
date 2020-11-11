@@ -145,4 +145,4 @@ runBC' (DROP: cs) (_:e) s  = runBC' cs e s
 runBC' (PRINT: cs) e (n:s) = do
                   printPCF ("El valor en el stack es: " ++ show(n))
                   runBC' cs e (n:s)
-runBC' cs _ _ = printPCF ("Error en Compilación a Bytecode " ++ show(cs))
+runBC' _ _ _ = do failPCF $ "Error en Ejecución a Bytecode "

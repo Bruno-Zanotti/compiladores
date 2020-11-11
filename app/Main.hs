@@ -51,7 +51,13 @@ main = execParser opts >>= go
     go (Interactive,files) =
         do runPCF (runInputT defaultSettings (main' files))
            return ()
-    go (Typecheck, files) = undefined 
+    go (Typecheck, files) = do err <- runPCF $ catchErrors $ typeCheckFiles files
+                               case err of
+                                 Left _ -> return()
+                                 Right e -> case e of
+                                              Nothing -> return()
+                                              Just () -> putStrLn ("El programa tipa correctamente")
+                               return ()
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
     go (Run,files) = do
@@ -77,10 +83,35 @@ main' args = do
                        b <- lift $ catchErrors $ handleCommand c
                        maybe loop (flip when loop) b
 
+------------------------------------------
+--                Modes                 --
+------------------------------------------
+
+-- Typecheck
+typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
+typeCheckFiles []     = return ()
+typeCheckFiles (x:xs) = do
+        typeCheckFile x
+        typeCheckFiles xs
+
+typeCheckFile :: MonadPCF m => FilePath -> m ()
+typeCheckFile f = do
+    printPCF ("Abriendo "++f++"...")
+    let filename = reverse(dropWhile isSpace (reverse f))
+    x <- liftIO $ catch (readFile filename)
+               (\e -> do let err = show (e :: IOException)
+                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
+                         return "")
+    decls <- parseIO filename program x
+    snterm <- declsToTerm decls
+    term <- elab snterm
+    tc term []
+    return ()
+
+-- Bytecompile
 byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
 byteCompileFiles []     = return ()
 byteCompileFiles (x:xs) = do
-        -- modify (\s -> s { lfile = x, inter = False })
         byteCompileFile x
         byteCompileFiles xs
 
@@ -110,10 +141,10 @@ declsToTerm (SDRec p n bs ty b:xs) = case xs of
                                       [] -> return (SRec p n bs ty b (SV p n))
                                       _  -> do ts <- declsToTerm xs
                                                return (SRec p n bs ty b ts)
-declsToTerm (x:_) = do failPCF $ "Declaración invalida "++show(x)
+declsToTerm (x:_) = do failPCF $ "Declaración invalida "++ show(x)
 
--- declsToTerm ((SDRec p n bs ty b):xs) = SRec p n bs ty b (declsToTerm xs)
- 
+------------------------------------------
+
 compileFiles ::  MonadPCF m => [String] -> m ()
 compileFiles []     = return ()
 compileFiles (x:xs) = do

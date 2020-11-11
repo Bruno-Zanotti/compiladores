@@ -139,12 +139,6 @@ ifz = do i <- getPos
          e <- stm
          return (SIfZ i c t e)
 
--- binding :: P (Name, STy)
--- binding = do v <- var
---              reservedOp ":"
---              ty <- typeP
---              return (v, ty)
-
 binding :: P [(Name, STy)]
 binding = do vs <- many1 var
              reservedOp ":"
@@ -152,7 +146,6 @@ binding = do vs <- many1 var
              return (fmap (\v -> (v,ty)) vs)
 
 binders :: P [(Name, STy)]
--- binders = concat (many (parens binding)) <|> return []
 binders = do vs <- many (parens binding)
              return (concat vs)
           <|> return []
