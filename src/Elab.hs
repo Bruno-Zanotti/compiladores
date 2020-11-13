@@ -68,7 +68,7 @@ desugarDecl (SDLet p v vs _ st)            = Decl p v <$> desugar (SLam p vs st)
 desugarDecl (SDRec p v [(x, xty)] ty st)   = desugarDecl (SDLet p v [] ty (SFix p v (SFunTy xty ty) x xty st))
 desugarDecl (SDRec p v ((x,xty):xs) ty st) = desugarDecl (SDRec p v [(x, xty)] (SFunTy (getType xs) ty) (SLam p xs st))
 -- TODO: ver
-desugarDecl (SDType p _ _) = failPosPCF p $ "Declaración de tipo inválida"
+desugarDecl (SDType p _ _) = failPosPCF p "Declaración de tipo inválida"
 
 desugarTy :: MonadPCF m => STy -> m Ty
 desugarTy SNatTy         = return NatTy

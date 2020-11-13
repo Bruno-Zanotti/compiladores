@@ -56,19 +56,19 @@ main = execParser opts >>= go
                                  Left _ -> return()
                                  Right e -> case e of
                                               Nothing -> return()
-                                              Just () -> putStrLn ("El programa tipa correctamente")
+                                              Just () -> putStrLn "El programa tipa correctamente"
                                return ()
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
     go (Run,files) = do
       bytecode <- mapM bcRead files 
-      runPCF $ catchErrors $ (mapM runBC bytecode)
+      runPCF $ catchErrors $ mapM runBC bytecode
       return ()
           
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
 main' args = do
         lift $ catchErrors $ compileFiles args
-        s <- lift $ get
+        s <- lift get
         when (inter s) $ liftIO $ putStrLn
           (  "Entorno interactivo para PCF0.\n"
           ++ "Escriba :? para recibir ayuda.")
@@ -125,11 +125,11 @@ byteCompileFile f = do
                          hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
                          return "")
     decls <- parseIO filename program x
-    mapM handleDecl decls
+    mapM_ handleDecl decls
     term <- declsToTerm decls
     bytecode <- bytecompileModule term
     let outputFile = dropExtension filename ++ ".byte"
-    printPCF ("Generando archivo compilado "++outputFile++"...")
+    printPCF ("Generando archivo compilado "++outputFile++"..."++show bytecode)
     liftIO $ bcWrite bytecode outputFile
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
@@ -141,7 +141,7 @@ declsToTerm (SDRec p n bs ty b:xs) = case xs of
                                       [] -> return (SRec p n bs ty b (SV p n))
                                       _  -> do ts <- declsToTerm xs
                                                return (SRec p n bs ty b ts)
-declsToTerm (x:_) = do failPCF $ "Declaración invalida "++ show(x)
+declsToTerm (x:_) = do failPCF $ "Declaración invalida "++ show x
 
 ------------------------------------------
 
@@ -169,7 +169,7 @@ parseIO filename p x = case runP p x filename of
                   Right r -> return r
 
 handleDecl ::  MonadPCF m => SDecl SNTerm -> m ()
-handleDecl (SDType p n sty) = do 
+handleDecl (SDType _ n sty) = do 
                         ty <- desugarTy sty
                         addTy n ty
 handleDecl d = do
@@ -274,7 +274,7 @@ printPhrase x =
     x' <- parseIO "<interactive>" stm x
     ex <- elab x'
     t  <- case x' of 
-           (SV p f) -> maybe ex id <$> lookupDecl f
+           (SV _ f) -> maybe ex id <$> lookupDecl f
            _        -> return ex  
     printPCF "NTerm:"
     printPCF (show x')

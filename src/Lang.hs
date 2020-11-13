@@ -35,7 +35,7 @@ data STy =
 
 type Name = String
 
-data Const = CNat Int
+newtype Const = CNat Int
   deriving Show
 
 data UnaryOp = Succ | Pred

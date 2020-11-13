@@ -28,7 +28,7 @@ varChanger local bound t = go 0 t where
   go n (App p l r)   = App p (go n l) (go n r)
   go n (Fix p f fty x xty t) = Fix p f fty x xty (go (n+2) t)
   go n (IfZ p c t e) = IfZ p (go n c) (go n t) (go n e)
-  go n t@(Const _ _) = t
+  go _ t@(Const _ _) = t
   go n (UnaryOp p op t) = UnaryOp p op (go n t)
   go n (Let p f ty t1 t2) = Let p f ty (go n t1) (go (n+1) t2)
 
@@ -81,10 +81,10 @@ substN ns = varChanger (\_ p n -> V p (Free n)) bnd
 -- Algunas definiciones auxiliares:
 
 subst :: Term -> Term -> Term
-subst n m = substN [n] m
+subst n = substN [n]
 
 close :: Name -> Term -> Term
 close nm = closeN [nm]
 
 open :: Name -> Term -> Term
-open x t = openN [x] t
+open x = openN [x]

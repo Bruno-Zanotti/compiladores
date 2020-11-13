@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-|
 Module      : Parse
 Description : Define un parser de términos PCF0 a términos fully named.
@@ -14,7 +15,6 @@ import Prelude hiding ( const )
 import Lang
 import Common
 import Text.Parsec hiding (runP)
-import Data.Char ( isNumber, ord )
 import qualified Text.Parsec.Token as Tok
 import Text.ParserCombinators.Parsec.Language ( GenLanguageDef(..), emptyDef )
 import qualified Options.Applicative as OptApp ( flag', flag, Parser, short, long, many, metavar, help, str, argument, (<|>) ) 
@@ -77,11 +77,9 @@ tyatom = (reserved "Nat" >> return SNatTy)
          <|> (SNamedTy <$> tyvar)
 
 typeP :: P STy
-typeP = try (do 
-          x <- tyatom
-          reservedOp "->"
-          y <- typeP
-          return (SFunTy x y))
+typeP = try (do x <- tyatom
+                reservedOp "->"
+                SFunTy x <$> typeP)
       <|> tyatom 
           
 const :: P Const
@@ -96,11 +94,9 @@ unaryOp :: P SNTerm
 unaryOp = try (unaryOpApp <|> unaryOpNotApp)
 
 unaryOpApp :: P SNTerm
-unaryOpApp = do
-  i <- getPos
-  o <- unaryOpName
-  a <- atom
-  return (SUnaryOp i o (Just a))
+unaryOpApp = do i <- getPos
+                o <- unaryOpName
+                SUnaryOp i o . Just <$> atom
 
 unaryOpNotApp :: P SNTerm
 unaryOpNotApp = do
@@ -119,15 +115,14 @@ lam = do i <- getPos
          reserved "fun"
          vs <- binders
          reservedOp "->"
-         t <- stm
-         return (SLam i vs t)
+         SLam i vs <$> stm
 
 -- Nota el parser app también parsea un solo atom.
 app :: P SNTerm
-app = (do i <- getPos
-          f <- atom
-          args <- many atom
-          return (foldl (SApp i) f args))
+app = do i <- getPos
+         f <- atom
+         args <- many atom
+         return (foldl (SApp i) f args)
 
 ifz :: P SNTerm
 ifz = do i <- getPos
@@ -136,14 +131,13 @@ ifz = do i <- getPos
          reserved "then"
          t <- stm
          reserved "else"
-         e <- stm
-         return (SIfZ i c t e)
+         SIfZ i c t <$> stm
 
 binding :: P [(Name, STy)]
 binding = do vs <- many1 var
              reservedOp ":"
              ty <- typeP
-             return (fmap (\v -> (v,ty)) vs)
+             return (fmap (,ty) vs)
 
 binders :: P [(Name, STy)]
 binders = do vs <- many (parens binding)
@@ -156,8 +150,7 @@ fix = do i <- getPos
          [(f, fty)] <- parens binding
          [(x, xty)] <- parens binding
          reservedOp "->"
-         t <- stm
-         return (SFix i f fty x xty t)
+         SFix i f fty x xty <$> stm
 
 letIn :: P SNTerm
 letIn = do i <- getPos
@@ -171,9 +164,10 @@ letIn = do i <- getPos
            t <- stm
            reserved "in"
            t' <- stm
-           case isRec of
-             True -> return (SRec i v vs ty t t')
-             _    -> return (SLet i v vs ty t t') 
+           (if isRec then
+                return (SRec i v vs ty t t')
+            else
+                return (SLet i v vs ty t t')) 
 
 -- | Parser de términos
 stm :: P SNTerm
@@ -194,18 +188,17 @@ declTerm = do
          ty <- typeP
          reservedOp "="
          t <- stm
-         case isRec of
-           True -> return (SDRec i v vs ty t)
-           _    -> return (SDLet i v vs ty t)
+         (if isRec then
+              return (SDRec i v vs ty t)
+          else
+              return (SDLet i v vs ty t))
 
 declTy :: P (SDecl a)
-declTy = do
-       i <- getPos
-       reserved "type"
-       v <- tyvar
-       reservedOp "="
-       ty <- typeP
-       return (SDType i v ty)
+declTy = do i <- getPos
+            reserved "type"
+            v <- tyvar
+            reservedOp "="
+            SDType i v <$> typeP
        
 -- | Parser de programas (listas de declaraciones)
 program :: P [SDecl SNTerm]
@@ -223,7 +216,7 @@ runP p s filename = runParser (whiteSpace *> p <* eof) () filename s
 parse :: String -> SNTerm
 parse s = case runP stm s "" of
             Right t -> t
-            Left e -> error ("no parse: " ++ show s)
+            Left _ -> error ("no parse: " ++ show s)
 
 data Mode = Interactive
             | Typecheck
