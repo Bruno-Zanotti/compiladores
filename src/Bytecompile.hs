@@ -81,7 +81,7 @@ bc (Fix _ _ _ _ _ t)   = do bt <- bc t
 bc (IfZ _ c t f)       = do btc <- bc c
                             btt <- bc t
                             btf <- bc f
-                            let args = [IFZ] ++ (length btt: btt) ++ (length btf: btf)
+                            let args = [IFZ] ++ [JUMP, length btt + 2] ++ btt ++ [JUMP, length btf] ++ btf
                             return ([FUNCTION, length args + 1] ++ args ++ [RETURN] ++ btc ++ [CALL])
 bc (Let _ _ _ t1 t2)  = do bt1 <- bc t1
                            bt2 <- bc t2
@@ -89,7 +89,8 @@ bc (Let _ _ _ t1 t2)  = do bt1 <- bc t1
 
 bytecompileModule :: MonadPCF m => SNTerm -> m Bytecode
 bytecompileModule st = do t <- elab st 
-                          bc t
+                          byte <- bc t
+                          return (byte ++ [PRINT, STOP])
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo 
 bcWrite :: Bytecode -> FilePath -> IO ()
@@ -113,7 +114,7 @@ type Stack = [Val]
 type Env = [Val]
 
 runBC :: MonadPCF m => Bytecode -> m ()
-runBC cs = runBC' (cs ++ [PRINT,STOP]) [] []
+runBC cs = runBC' cs [] []
 
 runBC' :: MonadPCF m => Bytecode -> Env -> Stack -> m ()
 runBC' (CONST: n: cs) e s               = runBC' cs e (I n:s)
@@ -127,15 +128,11 @@ runBC' (FUNCTION: l: cs) e s            = case drop l cs of
                                           where cf = take l cs
                                                 efix = Fun efix cf : e
 runBC' (RETURN: _) _  (v: (RA e c): s)  = runBC' c e (v:s)
-runBC' (IFZ: l: cs) (c:e) s = case c of
-                                I 0 -> runBC' (t ++ cs'') e s
-                                _   -> runBC' (f ++ cs'') e s
-                              where t = take l cs
-                                    (lf:cs') = drop l cs
-                                    f = take lf cs'
-                                    cs'' = drop lf cs'
+runBC' (IFZ: cs@(JUMP: _: cs')) (c:e) s = case c of
+                                I 0 -> runBC' cs' e s
+                                _   -> runBC' cs e s
 runBC' [STOP] _ _          = return ()
-runBC' (JUMP: _) _ _       = undefined
+runBC' (JUMP: n: cs) e s    = runBC' (drop n cs) e s 
 runBC' (SHIFT: cs) e (v:s) = runBC' cs (v:e) s
 runBC' (DROP: cs) (_:e) s  = runBC' cs e s
 runBC' (PRINT: cs) e (n:s) = do
