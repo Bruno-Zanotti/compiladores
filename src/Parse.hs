@@ -29,7 +29,7 @@ lexer :: Tok.TokenParser u
 lexer = Tok.makeTokenParser $
         emptyDef {
          commentLine    = "#",
-         reservedNames = ["let", "in", "rec", "fun", "fix", "then", "else", "succ", "pred", "ifz", "Nat", "type"],
+         reservedNames = ["let", "in", "rec", "fun", "fix", "then", "else", "succ", "pred", "ifz", "Nat", "type", "sum", "res"],
          reservedOpNames = ["->",":","="]
         }
 
@@ -104,6 +104,29 @@ unaryOpNotApp = do
   o <- unaryOpName
   return (SUnaryOp i o Nothing)
 
+binaryOpName :: P BinaryOp
+binaryOpName =
+      (reserved "sum" >> return Sum)
+  <|> (reserved "res" >> return Res)
+
+binaryOp :: P SNTerm
+binaryOp = try binaryOpApp <|> binaryOpNotApp
+
+binaryOpApp :: P SNTerm
+binaryOpApp = do i <- getPos
+                 o <- binaryOpName
+                 t1 <- atom
+                 SBinaryOp i o (Just t1) . Just <$> atom
+
+binaryOpNotApp :: P SNTerm
+binaryOpNotApp = do 
+     i <- getPos
+     o <- binaryOpName
+     try
+       (do t1 <- atom
+           return (SBinaryOp i o (Just t1) Nothing))
+       <|> return (SBinaryOp i o Nothing Nothing)
+
 atom :: P SNTerm
 atom = (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
@@ -171,7 +194,7 @@ letIn = do i <- getPos
 
 -- | Parser de términos
 stm :: P SNTerm
-stm = app <|> lam <|> ifz <|> unaryOp <|> fix <|> letIn
+stm = app <|> lam <|> ifz <|> unaryOp <|> binaryOp <|> fix <|> letIn
 
 -- | Parser de declaraciones
 decl :: P (SDecl SNTerm)

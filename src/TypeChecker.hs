@@ -33,6 +33,11 @@ tc (Const _ (CNat _)) _ = return NatTy
 tc (UnaryOp _ _ t) bs = do 
       ty <- tc t bs
       expect NatTy ty t
+tc (BinaryOp _ _ t1 t2) bs = do 
+      ty1 <- tc t1 bs
+      expect NatTy ty1 t1
+      ty2 <- tc t2 bs
+      expect NatTy ty2 t2
 tc (IfZ _ c t t') bs = do
        tyc  <- tc c bs
        expect NatTy tyc c

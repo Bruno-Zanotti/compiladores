@@ -50,14 +50,15 @@
 #define CALL     5
 #define SUCC     6
 #define PRED     7
-#define IFZ      8
-#define FIX      9
-#define STOP     10
-#define JUMP     11
-#define SHIFT    12
-#define DROP     13
-#define PRINT    14
-#define ADD      20
+#define SUM      8
+#define RES      9
+#define IFZ      10
+#define FIX      11
+#define STOP     12
+#define JUMP     13
+#define SHIFT    14
+#define DROP     15
+#define PRINT    16
 
 #define CHUNK 4096
 
@@ -235,6 +236,20 @@ void run(code init_c)
 		case PRED: {
 			if (s[-1].i > 0)
 				s[-1].i--;
+			break;
+		}
+
+		case SUM: {
+			/* Suma: ya tenemos los dos argumentos
+			 * en la stack, retornamos la suma. */
+			s[-1].i += s[-2].i;
+			break;
+		}
+
+		case RES: {
+			/* Resta: ya tenemos los dos argumentos
+			 * en la stack, retornamos la resta. */
+			while (--s[-1].i > 0 && --s[-2].i > 0);
 			break;
 		}
 

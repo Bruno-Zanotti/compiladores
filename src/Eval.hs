@@ -47,6 +47,19 @@ eval (UnaryOp p Pred t) = do
         case te of
           Const _ (CNat n) -> return (Const p (CNat (max 0 (n-1))))
           _                -> abort "Error de tipo en runtime!"
+eval (BinaryOp p Sum t1 t2) = do
+        te1 <- eval t1
+        te2 <- eval t2
+        case (te1, te2) of
+          (Const _ (CNat n1), Const _ (CNat n2)) -> return (Const p (CNat (n1+n2)))
+          _                                      -> abort "Error de tipo en runtime!"
+eval (BinaryOp p Res t1 t2) = do
+        te1 <- eval t1
+        te2 <- eval t2
+        case (te1, te2) of
+          (Const _ (CNat n1), Const _ (CNat n2)) -> return (Const p (CNat (max 0 (n1-n2))))
+          _                                      -> abort "Error de tipo en runtime!"
+
 eval (IfZ _ c t e) = do
      ce <- eval c
      case ce of

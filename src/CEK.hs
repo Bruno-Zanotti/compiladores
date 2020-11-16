@@ -44,6 +44,10 @@ data Frames =
     | KIf Env Term Term
     | KSucc 
     | KPred
+    | KSum Env Term 
+    | KSum2 Term 
+    | KRes Env Term 
+    | KRes2 Term 
     | KLet Env Term
     deriving (Show)
 
@@ -53,6 +57,8 @@ type Kont = [Frames]
 search :: MonadPCF m => Term -> Env -> Kont -> m Val
 search (UnaryOp _ Pred t) e k = search t e (KPred:k)
 search (UnaryOp _ Succ t) e k = search t e (KSucc:k)
+search (BinaryOp _ Sum t1 t2) e k = search t1 e (KSum e t2:k)
+search (BinaryOp _ Res t1 t2) e k = search t1 e (KRes e t2:k)
 search (IfZ _ t1 t2 t3) e k   = search t1 e (KIf e t2 t3:k)
 search (App _ t1 t2) e k      = search t1 e (KArg e t2:k)
 search (V _ (Bound v)) e k    = destroy (e!!v) k
@@ -71,6 +77,10 @@ destroy v []                                 = return v
 destroy (N 0) (KPred:k)                      = destroy (N 0) k
 destroy (N n) (KPred:k)                      = destroy (N (n-1)) k
 destroy (N n) (KSucc:k)                      = destroy (N (n+1)) k
+destroy (N n) (KSum e t2:k)                  = search t2 e (KSum2 (Const NoPos (CNat n)):k)
+destroy (N n1) (KSum2 (Const _ (CNat n2)):k) = destroy (N (n1+n2)) k
+destroy (N n) (KRes e t2:k)                  = search t2 e (KRes2 (Const NoPos (CNat n)):k)
+destroy (N n1) (KRes2 (Const _ (CNat n2)):k) = destroy (N (max 0 (n2-n1))) k
 destroy (N 0) ((KIf e t _):k)                = search t e k
 destroy (N _) ((KIf e _ f):k)                = search f e k
 destroy (Clos c) ((KArg e t):k)              = search t e (KClos c:k)

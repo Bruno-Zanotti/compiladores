@@ -34,7 +34,7 @@ import PPrint ( pp , ppTy )
 import MonadPCF
 import TypeChecker ( tc, tcDecl )
 import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
-import Bytecompile
+import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC )
 import Common ( dropExtension )
 
 prompt :: String

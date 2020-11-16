@@ -56,36 +56,44 @@ pattern FUNCTION = 4
 pattern CALL     = 5
 pattern SUCC     = 6
 pattern PRED     = 7
-pattern IFZ      = 8
-pattern FIX      = 9
-pattern STOP     = 10
-pattern JUMP     = 11
-pattern SHIFT    = 12
-pattern DROP     = 13
-pattern PRINT    = 14
+pattern SUM      = 8
+pattern RES      = 9
+pattern IFZ      = 10
+pattern FIX      = 11
+pattern STOP     = 12
+pattern JUMP     = 13
+pattern SHIFT    = 14
+pattern DROP     = 15
+pattern PRINT    = 16
 
 bc :: MonadPCF m => Term -> m Bytecode
-bc (V _ (Bound n))     = return [ACCESS, n]
-bc (Const _ (CNat n))  = return [CONST, n]
-bc (Lam _ _ _ t)       = do bt <- bc t
-                            return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN])
-bc (App _ f e)         = do btf <- bc f
-                            bte <- bc e
-                            return (btf ++ bte ++ [CALL])
-bc (UnaryOp _ Succ t)  = do bt <- bc t
-                            return (bt ++ [SUCC]) 
-bc (UnaryOp _ Pred t)  = do bt <- bc t
-                            return (bt ++ [PRED])
-bc (Fix _ _ _ _ _ t)   = do bt <- bc t
-                            return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN, FIX])
-bc (IfZ _ c t f)       = do btc <- bc c
-                            btt <- bc t
-                            btf <- bc f
-                            let args = [IFZ] ++ [JUMP, length btt + 2] ++ btt ++ [JUMP, length btf] ++ btf
-                            return ([FUNCTION, length args + 1] ++ args ++ [RETURN] ++ btc ++ [CALL])
-bc (Let _ _ _ t1 t2)  = do bt1 <- bc t1
-                           bt2 <- bc t2
-                           return (bt1 ++ [SHIFT] ++ bt2 ++ [DROP])
+bc (V _ (Bound n))         = return [ACCESS, n]
+bc (Const _ (CNat n))      = return [CONST, n]
+bc (Lam _ _ _ t)           = do bt <- bc t
+                                return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN])
+bc (App _ f e)             = do btf <- bc f
+                                bte <- bc e
+                                return (btf ++ bte ++ [CALL])
+bc (UnaryOp _ Succ t)      = do bt <- bc t
+                                return (bt ++ [SUCC]) 
+bc (UnaryOp _ Pred t)      = do bt <- bc t
+                                return (bt ++ [PRED])
+bc (BinaryOp _ Sum t1 t2)  = do bt1 <- bc t1
+                                bt2 <- bc t2
+                                return (bt2 ++ bt1 ++ [SUM]) 
+bc (BinaryOp _ Res t1 t2)  = do bt1 <- bc t1
+                                bt2 <- bc t2
+                                return (bt2 ++ bt1 ++ [RES])
+bc (Fix _ _ _ _ _ t)       = do bt <- bc t
+                                return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN, FIX])
+bc (IfZ _ c t f)           = do btc <- bc c
+                                btt <- bc t
+                                btf <- bc f
+                                let args = [IFZ] ++ [JUMP, length btt + 2] ++ btt ++ [JUMP, length btf] ++ btf
+                                return ([FUNCTION, length args + 1] ++ args ++ [RETURN] ++ btc ++ [CALL])
+bc (Let _ _ _ t1 t2)       = do bt1 <- bc t1
+                                bt2 <- bc t2
+                                return (bt1 ++ [SHIFT] ++ bt2 ++ [DROP])
 
 bytecompileModule :: MonadPCF m => SNTerm -> m Bytecode
 bytecompileModule st = do t <- elab st 
@@ -120,6 +128,8 @@ runBC' :: MonadPCF m => Bytecode -> Env -> Stack -> m ()
 runBC' (CONST: n: cs) e s               = runBC' cs e (I n:s)
 runBC' (SUCC: cs) e (I n: s)            = runBC' cs e (I (n+1):s)
 runBC' (PRED: cs) e (I n: s)            = runBC' cs e (I (n-1):s)
+runBC' (SUM: cs) e (I n2: I n1: s)      = runBC' cs e (I (n2+n1):s)
+runBC' (RES: cs) e (I n2: I n1: s)      = runBC' cs e (I (max 0 (n2-n1)):s)
 runBC' (ACCESS: i: cs) e s              = runBC' cs e (e!!i:s)
 runBC' (CALL: cs) e (v: (Fun ef cf): s) = runBC' cf (v:ef) (RA e cs:s)
 runBC' (FUNCTION: l: cs) e s            = case drop l cs of
