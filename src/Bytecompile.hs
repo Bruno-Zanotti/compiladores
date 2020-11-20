@@ -63,12 +63,13 @@ pattern JUMP     = 13
 pattern SHIFT    = 14
 pattern DROP     = 15
 pattern PRINT    = 16
+pattern TAILCALL = 17
 
 bc :: MonadPCF m => Term -> m Bytecode
 bc (V _ (Bound n))         = return [ACCESS, n]
 bc (Const _ (CNat n))      = return [CONST, n]
-bc (Lam _ _ _ t)           = do bt <- bc t
-                                return ([FUNCTION, length bt + 1] ++ bt ++ [RETURN])
+bc (Lam _ _ _ t)           = do bt <- bt t
+                                return ([FUNCTION, length bt] ++ bt)
 bc (App _ f e)             = do btf <- bc f
                                 bte <- bc e
                                 return (btf ++ bte ++ [CALL])
@@ -83,11 +84,24 @@ bc (Fix _ _ _ _ _ t)       = do bt <- bc t
 bc (IfZ _ c t f)           = do btc <- bc c
                                 btt <- bc t
                                 btf <- bc f
-                                let args = [IFZ] ++ [JUMP, length btt + 2] ++ btt ++ [JUMP, length btf] ++ btf
-                                return ([FUNCTION, length args + 1] ++ args ++ [RETURN] ++ btc ++ [CALL])
+                                return (btc ++ [IFZ, length btt] ++ btt ++ [RETURN] ++ btf ++ [RETURN])
 bc (Let _ _ _ t1 t2)       = do bt1 <- bc t1
                                 bt2 <- bc t2
                                 return (bt1 ++ [SHIFT] ++ bt2 ++ [DROP])
+
+bt :: MonadPCF m => Term -> m Bytecode
+bt (App _ f e)             = do btf <- bc f
+                                bte <- bc e
+                                return (btf ++ bte ++ [TAILCALL])
+bt (IfZ _ c t f)           = do btc <- bc c
+                                btt <- bt t
+                                btf <- bt f
+                                return (btc ++ [IFZ, length btt] ++ btt ++ btf)
+bt (Let _ _ _ t1 t2)       = do bt1 <- bc t1
+                                bt2 <- bt t2
+                                return (bt1 ++ [SHIFT] ++ bt2)
+bt t                       = do bt <- bc t
+                                return (bt ++ [RETURN])
 
 bytecompileModule :: MonadPCF m => SNTerm -> m Bytecode
 bytecompileModule st = do t <- elab st 
@@ -119,25 +133,25 @@ runBC :: MonadPCF m => Bytecode -> m ()
 runBC cs = runBC' cs [] []
 
 runBC' :: MonadPCF m => Bytecode -> Env -> Stack -> m ()
-runBC' (CONST: n: cs) e s               = runBC' cs e (I n:s)
-runBC' (SUM: cs) e (I n2: I n1: s)      = runBC' cs e (I (n2+n1):s)
-runBC' (RES: cs) e (I n2: I n1: s)      = runBC' cs e (I (max 0 (n2-n1)):s)
-runBC' (ACCESS: i: cs) e s              = runBC' cs e (e!!i:s)
-runBC' (CALL: cs) e (v: (Fun ef cf): s) = runBC' cf (v:ef) (RA e cs:s)
-runBC' (FUNCTION: l: cs) e s            = case drop l cs of
-                                            FIX:cs' -> runBC' cs' e (Fun efix cf :s)
-                                            cs'     -> runBC' cs' e (Fun e cf:s)
-                                          where cf = take l cs
-                                                efix = Fun efix cf : e
-runBC' (RETURN: _) _  (v: (RA e c): s)  = runBC' c e (v:s)
-runBC' (IFZ: cs@(JUMP: _: cs')) (c:e) s = case c of
-                                I 0 -> runBC' cs' e s
-                                _   -> runBC' cs e s
-runBC' [STOP] _ _          = return ()
-runBC' (JUMP: n: cs) e s    = runBC' (drop n cs) e s 
-runBC' (SHIFT: cs) e (v:s) = runBC' cs (v:e) s
-runBC' (DROP: cs) (_:e) s  = runBC' cs e s
-runBC' (PRINT: cs) e (n:s) = do
-                  printPCF ("El valor en el stack es: " ++ show n)
-                  runBC' cs e (n:s)
-runBC' _ _ _ = do failPCF "Error en Ejecución a Bytecode "
+runBC' (CONST: n: cs) e s                              = runBC' cs e (I n:s)
+runBC' (SUM: cs) e (I n2: I n1: s)                     = runBC' cs e (I (n2+n1):s)
+runBC' (RES: cs) e (I n2: I n1: s)                     = runBC' cs e (I (max 0 (n2-n1)):s)
+runBC' (ACCESS: i: cs) e s                             = runBC' cs e (e!!i:s)
+runBC' (CALL: cs) e (v: (Fun ef cf): s)                = runBC' cf (v:ef) (RA e cs:s)
+runBC' (FUNCTION: l: cs) e s                           = case drop l cs of
+                                                           FIX:cs' -> runBC' cs' e (Fun efix cf :s)
+                                                           cs'     -> runBC' cs' e (Fun e cf:s)
+                                                         where cf   = take l cs
+                                                               efix = Fun efix cf : e
+runBC' (RETURN: _) _  (v: (RA e c): s)                 = runBC' c e (v:s)
+runBC' (IFZ: n: cs) e (c:s)                            = case c of
+                                                           I 0 -> runBC' cs e s
+                                                           _   -> runBC' ([JUMP, n] ++ cs) e s
+runBC' [STOP] _ _                                      = return ()
+runBC' (JUMP: n: cs) e s                               = runBC' (drop n cs) e s 
+runBC' (SHIFT: cs) e (v:s)                             = runBC' cs (v:e) s
+runBC' (DROP: cs) (_:e) s                              = runBC' cs e s
+runBC' (PRINT: cs) e (n:s)                             = do printPCF ("El valor en el stack es: " ++ show n)
+                                                            runBC' cs e (n:s)
+runBC' (TAILCALL: _) e (v: (Fun _ cf): ra@(RA _ _): s) = runBC' cf (v:e) (ra: s)
+runBC' _ _ _                                           = do failPCF "Error en Ejecución a Bytecode"
