@@ -17,8 +17,11 @@ import Lang
       STm(SLam, SV, SConst, SApp, SUnaryOp, SBinaryOp, SIfZ, SLet, SRec, SFix),
       Var(Free),
       Term,
+      UnaryOp(..),
+      Const(..),
+      BinaryOp(..),
       NTerm,
-      Tm(Lam, V, Const, UnaryOp, BinaryOp, Fix, IfZ, App, Let),
+      Tm(Lam, V, Const, BinaryOp, Fix, IfZ, App, Let),
       Decl(Decl),
       Ty(NatTy, FunTy),
       STy(SNatTy, SFunTy, SNamedTy),
@@ -36,7 +39,6 @@ elab' (Lam p v ty t)        = Lam p v ty (close v (elab' t))
 elab' (App p h a)           = App p (elab' h) (elab' a)
 elab' (Fix p f fty x xty t) = Fix p f fty x xty (closeN [f, x] (elab' t))
 elab' (IfZ p c t e)         = IfZ p (elab' c) (elab' t) (elab' e)
-elab' (UnaryOp i o t)       = UnaryOp i o (elab' t)
 elab' (BinaryOp i o t1 t2)  = BinaryOp i o (elab' t1) (elab' t2)
 elab' (Let p f ty t1 t2)    = Let p f ty (elab' t1) (close f (elab' t2))
 
@@ -53,7 +55,8 @@ desugar (SLam p [(x, ty)] st)                 = Lam p x <$> desugarTy ty <*> des
 desugar (SLam p ((x, ty):xs) st)              = Lam p x <$> desugarTy ty <*> desugar (SLam p xs st)
 desugar (SApp p st1 st2)                      = App p <$> desugar st1 <*> desugar st2
 desugar (SUnaryOp p o Nothing)                = desugar(SLam p [("x", SNatTy)] (SUnaryOp p o (Just (SV p "x"))))
-desugar (SUnaryOp p o (Just st))              = UnaryOp p o <$> desugar st
+desugar (SUnaryOp p Succ (Just st))           = BinaryOp p Sum <$> desugar st <*> desugar (SConst p (CNat 1))
+desugar (SUnaryOp p Pred (Just st))           = BinaryOp p Res <$> desugar st <*> desugar (SConst p (CNat 1))
 desugar (SBinaryOp p o Nothing Nothing)       = desugar(SLam p [("x", SNatTy), ("y", SNatTy)] (SBinaryOp p o (Just (SV p "x"))(Just (SV p "y"))))
 desugar (SBinaryOp p o (Just st) Nothing)     = desugar(SLam p [("x", SNatTy)] (SBinaryOp p o (Just st) (Just (SV p "x"))))
 desugar (SBinaryOp p o (Just st1) (Just st2)) = BinaryOp p o <$> desugar st1 <*> desugar st2

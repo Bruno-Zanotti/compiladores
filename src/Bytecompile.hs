@@ -54,8 +54,6 @@ pattern CONST    = 2
 pattern ACCESS   = 3
 pattern FUNCTION = 4
 pattern CALL     = 5
-pattern SUCC     = 6
-pattern PRED     = 7
 pattern SUM      = 8
 pattern RES      = 9
 pattern IFZ      = 10
@@ -74,10 +72,6 @@ bc (Lam _ _ _ t)           = do bt <- bc t
 bc (App _ f e)             = do btf <- bc f
                                 bte <- bc e
                                 return (btf ++ bte ++ [CALL])
-bc (UnaryOp _ Succ t)      = do bt <- bc t
-                                return (bt ++ [SUCC]) 
-bc (UnaryOp _ Pred t)      = do bt <- bc t
-                                return (bt ++ [PRED])
 bc (BinaryOp _ Sum t1 t2)  = do bt1 <- bc t1
                                 bt2 <- bc t2
                                 return (bt2 ++ bt1 ++ [SUM]) 
@@ -126,8 +120,6 @@ runBC cs = runBC' cs [] []
 
 runBC' :: MonadPCF m => Bytecode -> Env -> Stack -> m ()
 runBC' (CONST: n: cs) e s               = runBC' cs e (I n:s)
-runBC' (SUCC: cs) e (I n: s)            = runBC' cs e (I (n+1):s)
-runBC' (PRED: cs) e (I n: s)            = runBC' cs e (I (n-1):s)
 runBC' (SUM: cs) e (I n2: I n1: s)      = runBC' cs e (I (n2+n1):s)
 runBC' (RES: cs) e (I n2: I n1: s)      = runBC' cs e (I (max 0 (n2-n1)):s)
 runBC' (ACCESS: i: cs) e s              = runBC' cs e (e!!i:s)

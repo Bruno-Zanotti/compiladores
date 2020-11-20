@@ -42,8 +42,6 @@ data Frames =
       KArg Env Term
     | KClos Clos
     | KIf Env Term Term
-    | KSucc 
-    | KPred
     | KSum Env Term 
     | KSum2 Term 
     | KRes Env Term 
@@ -55,8 +53,6 @@ data Frames =
 type Kont = [Frames]
 
 search :: MonadPCF m => Term -> Env -> Kont -> m Val
-search (UnaryOp _ Pred t) e k = search t e (KPred:k)
-search (UnaryOp _ Succ t) e k = search t e (KSucc:k)
 search (BinaryOp _ Sum t1 t2) e k = search t1 e (KSum e t2:k)
 search (BinaryOp _ Res t1 t2) e k = search t1 e (KRes e t2:k)
 search (IfZ _ t1 t2 t3) e k   = search t1 e (KIf e t2 t3:k)
@@ -74,9 +70,6 @@ search (Let _ _ _ t1 t2) e k    = search t1 e (KLet e t2:k)
 
 destroy :: MonadPCF m => Val -> Kont -> m Val
 destroy v []                                 = return v
-destroy (N 0) (KPred:k)                      = destroy (N 0) k
-destroy (N n) (KPred:k)                      = destroy (N (n-1)) k
-destroy (N n) (KSucc:k)                      = destroy (N (n+1)) k
 destroy (N n) (KSum e t2:k)                  = search t2 e (KSum2 (Const NoPos (CNat n)):k)
 destroy (N n1) (KSum2 (Const _ (CNat n2)):k) = destroy (N (n1+n2)) k
 destroy (N n) (KRes e t2:k)                  = search t2 e (KRes2 (Const NoPos (CNat n)):k)
