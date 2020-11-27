@@ -91,7 +91,7 @@ unaryOpName =
   <|> (reserved "pred" >> return Pred)
 
 unaryOp :: P SNTerm
-unaryOp = try (unaryOpApp <|> unaryOpNotApp)
+unaryOp = try unaryOpApp <|> unaryOpNotApp
 
 unaryOpApp :: P SNTerm
 unaryOpApp = do i <- getPos
@@ -130,7 +130,9 @@ binaryOpNotApp = do
 atom :: P SNTerm
 atom = (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
-       <|> unaryOpNotApp
+       <|> unaryOp
+       <|> binaryOp
+      --  <|> unaryOpNotApp
        <|> parens stm
 
 lam :: P SNTerm

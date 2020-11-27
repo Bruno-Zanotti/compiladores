@@ -57,6 +57,7 @@
 #define SHIFT    14
 #define DROP     15
 #define PRINT    16
+#define TAILCALL 17
 
 #define CHUNK 4096
 
@@ -208,6 +209,7 @@ void run(code init_c)
 			/* Acceso a una variable: leemos el entero
 			 * siguiente que representa el índice y recorremos
 			 * el entorno hasta llegar a su binding. */
+			// printf("ACCESS %d, %d\n",s[-1].i,s[-2].i);
 			int i = *c++;
 			env ee = e;
 			while (i--)
@@ -227,14 +229,18 @@ void run(code init_c)
 		case SUM: {
 			/* Suma: ya tenemos los dos argumentos
 			 * en la stack, retornamos la suma. */
-			s[-1].i += s[-2].i;
+			s[-2].i += s[-1].i;
+			// Descartamos del stack del sumando
+			*--s;
 			break;
 		}
 
 		case RES: {
 			/* Resta: ya tenemos los dos argumentos
 			 * en la stack, retornamos la resta. */
-			while (--s[-1].i > 0 && --s[-2].i > 0);
+			while (--s[-2].i > 0 && --s[-1].i > 0);
+			// Descartamos del stack el valor del sustraendo
+			*--s;
 			break;
 		}
 
@@ -277,17 +283,24 @@ void run(code init_c)
 		}
 
 		case IFZ: {
-			/* Ifz: tenemos en el entorno el resultado de evaluar la condición.
+			/* Ifz: tenemos en el stack el resultado de evaluar la condición.
 			 * En el caso TRUE:
-			 * 	 Avanzamos dos instrucciones (JUMP y la cantidad a saltar) y continuamos la ejecución con el código de la rama True
+			 * 	 Avanzamos una instrucciones (la long del caso True) y continuamos la ejecución con el código.
 			 * En el caso FALSE:
-			 *	 La próxima instrucción será un JUMP que salta la rama True y continuamos con el código de la rama False.
+			 *	 Saltamos la rama True y continuamos con el código.
 			 */
 			
-			if (e->v.i == 0) c += 2;
-
-			/* Descartamos la condición del entorno */
-			e = e->next;
+			/* Descartamos la condición del stack */
+			value cond = *--s;
+			if (cond.i == 0) 
+				c++;
+			else
+			{
+				int n = *c++;
+				c += n;
+			}
+			
+			// e = e->next;
 			break;
 		}
 
@@ -364,6 +377,19 @@ void run(code init_c)
 		case PRINT: {
 			uint32_t i = s[-1].i;
 			printf("%" PRIu32 "\n", i);
+			break;
+		}
+
+		case TAILCALL: {
+			value arg = *--s;
+			value fun = *--s;
+			printf("\nasdjasdlasdjksd\n");
+			/* Agregamos arg al entorno */
+			e = env_push(e, arg);
+
+			/* Saltamos! */
+			c = fun.clo.clo_body;
+			
 			break;
 		}
 
