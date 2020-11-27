@@ -49,4 +49,4 @@ x |> f = f x
 dropExtension :: String -> String
 dropExtension (x:xs) = case x of
                         '.' -> []
-                        _   -> x: (dropExtension xs)
+                        _   -> x: dropExtension xs

@@ -13,4 +13,4 @@ app/Main
 *.bbl
 compiladores.cabal
 *.byte
-
+*.out

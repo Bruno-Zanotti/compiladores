@@ -16,7 +16,6 @@ import Lang
 import Global
 import MonadPCF
 import PPrint
-import Common
 import Subst
 
 
@@ -30,20 +29,22 @@ tc (V p (Bound _)) _ = failPosPCF p "typecheck: No deberia haber variables Bound
 tc (V p (Free n)) bs = case lookup n bs of
                            Nothing -> failPosPCF p $ "Variable no declarada "++ppName n
                            Just ty -> return ty 
-tc (Const _ (CNat n)) _ = return NatTy
-tc (UnaryOp p u t) bs = do 
-      ty <- tc t bs
-      expect NatTy ty t
-tc (IfZ p c t t') bs = do
+tc (Const _ (CNat _)) _ = return NatTy
+tc (BinaryOp _ _ t1 t2) bs = do 
+      ty1 <- tc t1 bs
+      expect NatTy ty1 t1
+      ty2 <- tc t2 bs
+      expect NatTy ty2 t2
+tc (IfZ _ c t t') bs = do
        tyc  <- tc c bs
        expect NatTy tyc c
        tyt  <- tc t bs
        tyt' <- tc t' bs
        expect tyt tyt' t'
-tc (Lam p v ty t) bs = do
+tc (Lam _ v ty t) bs = do
          ty' <- tc (open v t) ((v,ty):bs)
          return (FunTy ty ty')
-tc (App p t u) bs = do
+tc (App _ t u) bs = do
          tyt <- tc t bs
          (dom,cod) <- domCod t tyt
          tyu <- tc u bs
@@ -57,11 +58,10 @@ tc (Fix p f fty x xty t) bs = do
          ty' <- tc t' ((x,xty):(f,fty):bs)
          expect cod ty' t'
          return fty
-tc (Let _ f ty t1 t2) bs = do
+tc (Let _ f ty t1 t2) bs = do 
          ty1 <- tc t1 bs
          expect ty ty1 t1
-         ty2 <- tc (open f t2) ((f,ty):bs)
-         return ty2
+         tc (open f t2) ((f, ty) : bs)
 
 -- | @'typeError' t s@ lanza un error de tipo para el término @t@ 
 typeError :: MonadPCF m => Term   -- ^ término que se está chequeando  
@@ -83,7 +83,7 @@ expect ty ty' t = if ty == ty' then return ty
 -- | 'domCod chequea que un tipo sea función
 -- | devuelve un par con el tipo del dominio y el codominio de la función
 domCod :: MonadPCF m => Term -> Ty -> m (Ty, Ty)
-domCod t (FunTy d c) = return (d, c)
+domCod _ (FunTy d c) = return (d, c)
 domCod t ty = typeError t $ "Se esperaba un tipo función, pero se obtuvo: " ++ ppTy ty
 
 -- | 'tcDecl' chequea el tipo de una declaración

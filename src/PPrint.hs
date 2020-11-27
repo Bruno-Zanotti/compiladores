@@ -15,7 +15,6 @@ module PPrint (
     ) where
 
 import Prelude hiding ((<>))
-import Common
 import Lang
 import Subst
 import Text.PrettyPrint
@@ -26,8 +25,8 @@ import Text.PrettyPrint
 openRename :: [Name] -> Term -> ([Name], Term)
 openRename ns t =
   let fs = freeVars t in
-  let freshen n = let cands = n : (map (\i -> n ++ show i) [0..]) in
-                  let n' = head (filter (\n -> not (elem n fs)) cands) in
+  let freshen n = let cands = n : map (\i -> n ++ show i) [0..] in
+                  let n' = head (filter (\n -> notElem n fs) cands) in
                   n'
   in
   let fresh_ns = map freshen ns in
@@ -50,11 +49,11 @@ openAll (Fix p f fty x xty t) =
     let ([f', x'], t') = openRename [f, x] t in
     Fix p f' fty x' xty (openAll t')
 openAll (IfZ p c t e) = IfZ p (openAll c) (openAll t) (openAll e)
-openAll (UnaryOp i o t) = UnaryOp i o (openAll t)
+openAll (BinaryOp i o t1 t2) = BinaryOp i o (openAll t1) (openAll t2)
 
 -- | Pretty printer de nombres (Doc)
 name2doc :: Name -> Doc
-name2doc n = text n
+name2doc = text
 
 -- |  Pretty printer de nombres (String)
 ppName :: Name -> String
@@ -77,6 +76,10 @@ unary2doc :: UnaryOp -> Doc
 unary2doc Succ = text "succ"
 unary2doc Pred = text "pred"
 
+binary2doc :: BinaryOp -> Doc
+binary2doc Sum = text "sum"
+binary2doc Res = text "res"
+
 collectApp :: NTerm -> (NTerm, [NTerm])
 collectApp t = go [] t where
   go ts (App _ h t) = go (t:ts) h
@@ -94,13 +97,13 @@ t2doc :: Bool     -- Debe ser un átomo?
       -> Doc
 -- Uncomment to use the Show instance for STerm
 {- t2doc at x = text (show x) -}
-t2doc at (V _ x) = text x
-t2doc at (Const _ c) = c2doc c
+t2doc _ (V _ x) = text x
+t2doc _ (Const _ c) = c2doc c
 t2doc at (Lam _ v ty t) =
   parenIf at $
   sep [sep [text "fun", parens (sep [name2doc v,text ":",ty2doc ty]), text "->"], nest 2 (t2doc False t)]
 
-t2doc at t@(App _ _ _) =
+t2doc at t@App {} =
   let (h, ts) = collectApp t in
   parenIf at $
   t2doc True h <+> sep (map (t2doc True) ts)
@@ -117,9 +120,9 @@ t2doc at (IfZ _ c t e) =
       , text "then", nest 2 (t2doc False t)
       , text "else", nest 2 (t2doc False e) ]
 
-t2doc at (UnaryOp _ o t) =
+t2doc at (BinaryOp _ o t1 t2) =
   parenIf at $
-  unary2doc o <+> t2doc True t
+  binary2doc o <+> t2doc True t1 <+> t2doc True t2
 
 binding2doc (x, ty) =
   parens (sep [name2doc x, text ":", ty2doc ty])
