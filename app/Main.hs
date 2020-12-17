@@ -34,7 +34,8 @@ import PPrint ( pp , ppTy )
 import MonadPCF
 import TypeChecker ( tc, tcDecl )
 import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
-import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC )
+import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC ) 
+import ClosureCompile ( runCC )
 import Common ( dropExtension )
 
 prompt :: String
@@ -60,6 +61,8 @@ main = execParser opts >>= go
                                return ()
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
+    go (Closurecompile, files) = do runPCF $ catchErrors $ closureCompileFiles files
+                                    return ()
     go (Run,files) = do
       bytecode <- mapM bcRead files 
       runPCF $ catchErrors $ mapM runBC bytecode
@@ -131,6 +134,29 @@ byteCompileFile f = do
     let outputFile = dropExtension filename ++ ".byte"
     printPCF ("Generando archivo compilado "++outputFile++"..."++show bytecode)
     liftIO $ bcWrite bytecode outputFile
+
+-- Closurecompile
+closureCompileFiles :: MonadPCF m => [FilePath] -> m ()
+closureCompileFiles []     = return ()
+closureCompileFiles (x:xs) = do
+        closureCompileFile x
+        closureCompileFiles xs
+
+closureCompileFile :: MonadPCF m => FilePath -> m ()
+closureCompileFile f = do
+    printPCF ("Abriendo "++f++"...")
+    let filename = reverse(dropWhile isSpace (reverse f))
+    x <- liftIO $ catch (readFile filename)
+               (\e -> do let err = show (e :: IOException)
+                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
+                         return "")
+    sDecls <- parseIO filename program x
+    mapM_ handleDecl sDecls
+    decls <- mapM desugarDecl sDecls
+    let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+    printPCF ("La lista de decls es  \n"++show decls)
+    -- printPCF ("Resultado es  "++show (runCC declTerms))
+    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of
