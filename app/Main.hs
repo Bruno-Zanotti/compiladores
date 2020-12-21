@@ -68,10 +68,13 @@ main = execParser opts >>= go
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
     go (Closurecompile, files) = do runPCF $ catchErrors $ closureCompileFiles files
+<<<<<<< HEAD
                                     -- let llvm = "323"
                                     -- let commandline = "clang -Wno-override-module output.ll runtime.c -lgc -o prog"
                                     -- liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
                                     -- liftIO $ system commandline
+=======
+>>>>>>> 2122cac041523f382f7b9ae5c6905f725f184d16
                                     return ()
     go (Run,files) = do
       bytecode <- mapM bcRead files 
@@ -164,6 +167,7 @@ closureCompileFile f = do
     mapM_ handleDecl sDecls
     decls <- mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+<<<<<<< HEAD
     -- printPCF ("La lista de decls es  \n"++show decls)
     -- printPCF ("Resultado es  "++show (runCC declTerms))
     mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
@@ -179,6 +183,11 @@ runLlvm llvm commandline = do liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
                               liftIO $ system commandline
                               return ()
 
+=======
+    printPCF ("La lista de decls es  \n"++show decls)
+    -- printPCF ("Resultado es  "++show (runCC declTerms))
+    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
+>>>>>>> 2122cac041523f382f7b9ae5c6905f725f184d16
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of
