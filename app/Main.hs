@@ -164,6 +164,10 @@ closureCompileFile f = do
     mapM_ handleDecl sDecls
     decls <- mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> c3e24d9640b55361d8dc5a98728589b81a5abcc8
     -- printPCF ("La lista de decls es  \n"++show decls)
     -- printPCF ("Resultado es  "++show (runCC declTerms))
     mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
@@ -179,6 +183,14 @@ runLlvm llvm commandline = do liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
                               liftIO $ system commandline
                               return ()
 
+<<<<<<< HEAD
+=======
+=======
+    printPCF ("La lista de decls es  \n"++show decls)
+    -- printPCF ("Resultado es  "++show (runCC declTerms))
+    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
+>>>>>>> 2122cac041523f382f7b9ae5c6905f725f184d16
+>>>>>>> c3e24d9640b55361d8dc5a98728589b81a5abcc8
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of
