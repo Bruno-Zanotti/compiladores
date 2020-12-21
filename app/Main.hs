@@ -37,6 +37,12 @@ import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDes
 import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC ) 
 import ClosureCompile ( runCC )
 import Common ( dropExtension )
+import System.Process ( system )
+import Data.Text.Lazy.IO as TIO (writeFile)
+-- import qualified Data.ByteString.Lazy as TIO (writeFile)
+import LLVM.Pretty
+import CIR ( runCanon )
+import InstSel ( codegen )
 
 prompt :: String
 prompt = "PCF> "
@@ -62,6 +68,10 @@ main = execParser opts >>= go
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
     go (Closurecompile, files) = do runPCF $ catchErrors $ closureCompileFiles files
+                                    -- let llvm = "323"
+                                    -- let commandline = "clang -Wno-override-module output.ll runtime.c -lgc -o prog"
+                                    -- liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+                                    -- liftIO $ system commandline
                                     return ()
     go (Run,files) = do
       bytecode <- mapM bcRead files 
@@ -154,9 +164,21 @@ closureCompileFile f = do
     mapM_ handleDecl sDecls
     decls <- mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
-    printPCF ("La lista de decls es  \n"++show decls)
+    -- printPCF ("La lista de decls es  \n"++show decls)
     -- printPCF ("Resultado es  "++show (runCC declTerms))
     mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
+    -- code <- runCC declTerms
+    -- llvmCode <- codegen (runCanon code)
+    let llvmList = map (codegen . runCanon) (runCC declTerms)
+    let commandline = "clang -Wno-override-module output.ll runtime.c -lgc -o prog"
+    mapM_ (`runLlvm` commandline) llvmList
+    -- liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+    -- liftIO $ system commandline
+
+runLlvm llvm commandline = do liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+                              liftIO $ system commandline
+                              return ()
+
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of
