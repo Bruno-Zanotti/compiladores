@@ -182,8 +182,8 @@ closureCompileFile f = do
     printPCF (show (runCanon (runCC declTerms)))
     let llvm = codegen (runCanon (runCC declTerms))
     let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
-    liftIO $ system commandline
     liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+    liftIO $ system commandline
     liftIO $ system "./prog"
     return ()
 

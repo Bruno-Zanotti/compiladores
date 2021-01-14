@@ -72,5 +72,5 @@ runCC xs = runCC' xs 0
 
 runCC' :: [Decl Term] -> Int -> [IrDecl]
 runCC' [] _ = []
-runCC' (Decl _ name b :xs) n = snd res ++ IrVal name (fst (fst res)) : runCC' xs (snd (fst res))
-                            where res = runWriter (runStateT (closureConvert b) n)
+runCC' (Decl _ name b :xs) n = decls ++ IrVal name irtm : runCC' xs n'
+                            where ((irtm, n'), decls) = runWriter (runStateT (closureConvert b) n)
