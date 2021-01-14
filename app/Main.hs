@@ -32,6 +32,18 @@ import Elab ( elab, desugarDecl, elab', desugarTy )
 import CEK ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
+    ( when,
+      MonadState(get, put),
+      MonadError(throwError),
+      MonadPCF,
+      addDecl,
+      addTy,
+      catchErrors,
+      failPCF,
+      lookupDecl,
+      printPCF,
+      runPCF,
+      modify )
 import TypeChecker ( tc, tcDecl )
 import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
 import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC ) 
@@ -43,6 +55,7 @@ import Data.Text.Lazy.IO as TIO (writeFile)
 import LLVM.Pretty
 import CIR ( runCanon )
 import InstSel ( codegen )
+import LLVM.AST ( Module )
 
 prompt :: String
 prompt = "PCF> "
@@ -164,33 +177,16 @@ closureCompileFile f = do
     mapM_ handleDecl sDecls
     decls <- mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c3e24d9640b55361d8dc5a98728589b81a5abcc8
-    -- printPCF ("La lista de decls es  \n"++show decls)
-    -- printPCF ("Resultado es  "++show (runCC declTerms))
+    -- TODO: borrar print
     mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
-    -- code <- runCC declTerms
-    -- llvmCode <- codegen (runCanon code)
-    let llvmList = map (codegen . runCanon) (runCC declTerms)
-    let commandline = "clang -Wno-override-module output.ll runtime.c -lgc -o prog"
-    mapM_ (`runLlvm` commandline) llvmList
-    -- liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
-    -- liftIO $ system commandline
+    printPCF (show (runCanon (runCC declTerms)))
+    let llvm = codegen (runCanon (runCC declTerms))
+    let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
+    liftIO $ system commandline
+    liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+    liftIO $ system "./prog"
+    return ()
 
-runLlvm llvm commandline = do liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
-                              liftIO $ system commandline
-                              return ()
-
-<<<<<<< HEAD
-=======
-=======
-    printPCF ("La lista de decls es  \n"++show decls)
-    -- printPCF ("Resultado es  "++show (runCC declTerms))
-    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
->>>>>>> 2122cac041523f382f7b9ae5c6905f725f184d16
->>>>>>> c3e24d9640b55361d8dc5a98728589b81a5abcc8
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of

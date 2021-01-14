@@ -1,8 +1,10 @@
 module CIR where
 
-import Lang
-import Data.List (intercalate)
+import Lang hiding (V)
+import Data.List (intercalate, find)
 import ClosureCompile as CC
+import Data.Maybe (catMaybes, fromJust)
+import Control.Monad.State
 
 newtype Reg = Temp String
   deriving Show
@@ -63,29 +65,55 @@ instance Show CanonProg where
     pr1 (Right v) =
       "declare " ++ v ++ "\n\n"
 
-runCanon :: IrDecl -> CanonProg
-runCanon (IrVal n irtm)    = CanonProg [Right (n)]
-runCanon (IrFun n ns irtm) = CanonProg [Left (n, ns, [blockConvert irtm])]
+runCanon :: [IrDecl] -> CanonProg
+runCanon decls = CanonProg (cp ++ [Left ("pcfmain", [], [("main", insts, Return res)])])
+                where (cp, mb_insts) = unzip (runCanon' 0 decls)
+                      insts = (concat . catMaybes) mb_insts
+                      (Store _ (V res)) = last insts 
 
-blockConvert :: IrTm -> BasicBlock
-blockConvert (IrVar v)             = ("Var " ++ v, [], Return (G v))
--- blockConvert (IrCall v)         = (v, [], Return v)
-blockConvert (IrConst (CNat n))    = ("Const", [], Return (C n))
--- blockConvert (IrBinaryOp op t1 t2) = ("BinaryOp", [], Return v)
-blockConvert (IrLet v t1 t2)       = ("Let" ++ v, [Assign (Temp ("Reg: " ++ v)) (Phi [(loc, (G v))])], Return (G v))
-                                    where (loc, inst, term) = blockConvert t1
--- blockConvert (IrIfZ c t f)         = (v, [], Return v)
--- blockConvert (CC.MkClosure v xs)   = (v, [], Return v)
--- blockConvert (CC.IrAccess v n)     = (v, [], Return v)
+runCanon' :: Int -> [IrDecl] -> [(Either CanonFun CanonVal, Maybe [Inst])]
+runCanon' s (IrVal n irtm : xs) = (Right n, Just (inst' ++ [Store n (V val)])) : runCanon' s' xs
+                                where ((_, inst', Return val),s') = runState (blockConvert irtm) s
+runCanon' s (IrFun n ns irtm: xs) = (Left (n, ns, [bb]), Nothing) : runCanon' s' xs
+                                where (bb,s') = runState (blockConvert irtm) s
+runCanon' _ [] = []
 
--- IrCall IrTm [IrTm]
--- IrConst Const
--- IrBinaryOp BinaryOp IrTm IrTm
--- IrLet Name IrTm IrTm
--- IrIfZ IrTm IrTm IrTm
--- MkClosure Name [IrTm]
--- IrAccess IrTm Int
 
--- #IrVal {irDeclName = "y", irDeclDef = IrBinaryOp Add (IrConst (CNat 2)) (IrVar "x")}
 
--- #IrFun {irDeclName = "__0", irDeclArgNames = ["__clo2","__y1"], irDeclBody = IrBinaryOp Add #(IrConst (CNat 1)) (IrVar "x")}
+blockConvert :: IrTm -> State Int BasicBlock
+blockConvert (IrVar v)             = return ("Var" ++ v, [], Return (G v))
+blockConvert (CC.IrAccess v n)     = do val <- (getTerminatorVal . blockConvert) v
+                                        reg <- getRegister
+                                        return ("IrAccess", [Assign reg (Access val n)], Return (R reg))
+blockConvert (IrCall f xs)         = do reg <- getRegister
+                                        val <- (getTerminatorVal . blockConvert) f
+                                        let fun = do getTerminatorVal . blockConvert
+                                        vals <- mapM fun xs
+                                        return ("Call", [Assign reg (Call val vals)], Return (R reg))
+blockConvert (IrConst (CNat n))    = return ("Const", [], Return (C n))
+blockConvert (IrBinaryOp op t1 t2) = do v1 <- (getTerminatorVal . blockConvert) t1
+                                        v2 <- (getTerminatorVal . blockConvert) t2
+                                        r1 <- getRegister
+                                        r2 <- getRegister
+                                        r3 <- getRegister
+                                        return ("BinaryOp", [Assign r1 (V v1),
+                                                             Assign r2 (V v2),
+                                                             Assign r3 (BinOp op (R r1) (R r2))], Return (R r3))
+blockConvert (CC.MkClosure v xs)   = do reg <- getRegister
+                                        vals <- mapM (getTerminatorVal . blockConvert) xs
+                                        return ("MkClosure", [Assign reg (CIR.MkClosure v vals)], Return (R reg))
+blockConvert _ = undefined 
+-- blockConvert (IrLet v t1 t2)       = undefined
+-- blockConvert (IrIfZ c t f)         = undefined
+
+
+getTerminatorVal :: State Int BasicBlock -> State Int Val
+getTerminatorVal t1 = do s <- get
+                         let ((_, _, Return val), s') = runState t1 s
+                         put s'
+                         return val
+
+getRegister :: State Int Reg
+getRegister = do s <- get
+                 put (s+1)
+                 return (Temp ("R" ++ show s))

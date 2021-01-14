@@ -16,3 +16,4 @@ compiladores.cabal
 *.out
 output.ll
 test/*
+prog

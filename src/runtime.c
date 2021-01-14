@@ -35,5 +35,8 @@ extern uint64_t* pcfmain(void);
 int main (int argc, char **argv) {
 	uint64_t* rp = pcfmain();
 	uint64_t r = (uint64_t)rp;
+
+	pcf_print(r);
+
 	return r;
 }
