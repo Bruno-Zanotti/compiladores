@@ -15,6 +15,7 @@ import Subst
 import MonadPCF
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.List ( isPrefixOf, nub )
 
 data IrTm = IrVar Name
          | IrCall IrTm [IrTm]
@@ -34,11 +35,12 @@ closureConvert :: Term -> StateT Int (Writer [IrDecl]) IrTm
 closureConvert (V _ (Free n))        = return (IrVar n)
 closureConvert (Const _ n)           = return (IrConst n)
 closureConvert (Lam _ x _ t)         = do n <- fresh ""
-                                          arg <- fresh x
-                                          let vars = freeVars t
-                                          irt <- closureConvert (open arg t)
+                                          fx <- fresh x
+                                          let vars = filter (isPrefixOf "__") (nub $ freeVars t)
+                                          irt <- closureConvert $ open fx t
                                           clo <- fresh "clo"
-                                          writer (MkClosure n (map IrVar vars), [IrFun n [clo, arg] irt])
+                                          let irt' = foldr (\(v, i) t -> IrLet v (IrAccess (IrVar clo) i) t) irt (zip vars [1..])
+                                          writer (MkClosure n (map IrVar vars), [IrFun n [clo, fx] irt'])
 closureConvert (App _ f x)           = do clos <- closureConvert f
                                           irx <- closureConvert x
                                           return (IrCall (IrAccess clos 0) [clos, irx])
@@ -49,18 +51,19 @@ closureConvert (Fix _ f _ x _ t)     = do n <- fresh ""
                                           ff <- fresh f
                                           fx <- fresh x
                                           let args = [ff, fx]
-                                          let vars = freeVars t
-                                          irt <- closureConvert (openN args t)
+                                          let vars = filter (isPrefixOf "__") (nub $ freeVars t)
+                                          irt <- closureConvert $ openN args t
                                           clo <- fresh "clo"
-                                          let irl = IrLet ff (IrVar clo) irt
-                                          writer (MkClosure n (map IrVar vars), [IrFun n [clo,fx] irl])
-closureConvert (IfZ _ c t f)         =  do irc <- closureConvert c
-                                           irt <- closureConvert t
-                                           irf <- closureConvert f
-                                           return (IrIfZ irc irt irf)
-closureConvert (Let _ n _ t1 t2)     = do irt1 <- closureConvert t1
-                                          irt2 <- closureConvert t2
-                                          return (IrLet n irt1 irt2)
+                                          let irt' = foldr (\(v, i) t -> IrLet v (IrAccess (IrVar clo) i) t) irt (zip vars [1..])
+                                          writer (MkClosure n (map IrVar vars), [IrFun n [clo, fx] (IrLet ff (IrVar clo) irt')])
+closureConvert (IfZ _ c t f)         = do irc <- closureConvert c
+                                          irt <- closureConvert t
+                                          irf <- closureConvert f
+                                          return (IrIfZ irc irt irf)
+closureConvert (Let _ v _ t1 t2)     = do irt1 <- closureConvert t1
+                                          fv <- fresh v
+                                          irt2 <- closureConvert (open fv t2)
+                                          return (IrLet fv irt1 irt2)
 
 fresh :: Monad m => String -> StateT Int m Name
 fresh n = do s <- get

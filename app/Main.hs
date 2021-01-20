@@ -178,6 +178,7 @@ closureCompileFile f = do
     decls <- mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
     -- TODO: borrar print
+    -- printPCF ("Declaraciones pre CC\n" ++ show declTerms)
     mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
     printPCF (show (runCanon (runCC declTerms)))
     let llvm = codegen (runCanon (runCC declTerms))

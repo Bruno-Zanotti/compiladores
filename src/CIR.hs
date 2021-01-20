@@ -1,7 +1,7 @@
 module CIR where
 
 import Lang hiding (V)
-import Data.List (intercalate, find)
+import Data.List (intercalate, isPrefixOf)
 import ClosureCompile as CC
 import Data.Maybe (catMaybes, fromJust)
 import Control.Monad.State
@@ -67,30 +67,33 @@ instance Show CanonProg where
       "declare " ++ v ++ "\n\n"
 
 runCanon :: [IrDecl] -> CanonProg
-runCanon decls = CanonProg (cp ++ [Left ("pcfmain", [], blocks ++ [("main", inst, Return res)])])
-                where (cp, blocks', inst') =  unzip3 (runCanon' 0 [] decls)
-                      blocks = concat blocks'
-                      inst = concat inst'
-                      (Store _ (V res)) = last inst
+runCanon decls = CanonProg (cp ++ [Left ("pcfmain", [], blocks)])
+                where ((cp,_), blocks) =  runWriter (runStateT (runCanon' decls) (0, "main", []))
 
-runCanon' :: Int -> [Inst] -> [IrDecl] -> [(Either CanonFun CanonVal, [BasicBlock], [Inst])]
-runCanon' s is (IrVal n irtm : xs) = (Right n, bbs, inst) : runCanon' s' [] xs
-                                where ((val, (s', inst')), bbs) = runWriter (runStateT (blockConvert irtm) (s, is))
-                                      inst = inst' ++ [Store n (V val)]
-runCanon' s is (IrFun n ns irtm: xs) = (Left (n, ns, bbs), [], []) : runCanon' s' [] xs
-                                where ((_, (s', inst')), bbs) = runWriter (runStateT (blockConvert irtm) (s, is))
-runCanon' _ _ [] = []
+runCanon' :: [IrDecl] -> StateT (Int, Loc, [Inst]) (Writer [BasicBlock]) [Either CanonFun CanonVal]
+runCanon' (IrVal n irtm : xs) = do val <- blockConvert irtm
+                                   (_, l, i) <- get
+                                   case xs of
+                                     [] -> do tell [(l, i ++ [Store n (V val)], Return val)]
+                                              return [Right n]
+                                     _  -> do putInstruction (Store n (V val))
+                                              cps <- runCanon' xs
+                                              return (Right n : cps)
+runCanon' (IrFun n ns irtm: xs) = do (s, l, i) <- get
+                                     let ((val, (s', loc, inst)), bbs) = runWriter (runStateT (blockConvert irtm) (s, "init", []))
+                                     put (s', l, i)
+                                     let last_block = (loc, inst, Return val)
+                                     cps <- runCanon' xs
+                                     return (Left (n, ns, bbs++[last_block]): cps)
+runCanon' [] = return []
 
-
-blockConvert :: IrTm -> StateT (Int, [Inst]) (Writer [BasicBlock]) Val
-blockConvert (IrVar v)             = do reg <- getRegister
-                                        -- tell [("Var " ++ v, [Assign reg (V (G v))], Return (R reg))]
-                                        return (G v)
-blockConvert (CC.IrAccess v n)     = do val <- blockConvert v
-                                        -- let val = getReturnVal bbs 
+blockConvert :: IrTm -> StateT (Int, Loc, [Inst]) (Writer [BasicBlock]) Val
+blockConvert (IrVar v)             = if "__" `isPrefixOf` v
+                                     then return (R (Temp v))
+                                     else return (G v)
+blockConvert (CC.IrAccess f n)     = do val <- blockConvert f
                                         reg <- getRegister
                                         putInstruction (Assign reg (Access val n))
-                                        -- tell [("IrAccess", [Assign reg (Access val n)], Return (R reg))]
                                         return (R reg)
 blockConvert (IrCall f xs)         = do reg <- getRegister
                                         fun <- blockConvert f
@@ -103,54 +106,60 @@ blockConvert (IrBinaryOp op t1 t2) = do v1 <- blockConvert t1
                                         r1 <- getRegister
                                         r2 <- getRegister
                                         r3 <- getRegister
+                                        loc <- getLoc (show op)
                                         putInstruction (Assign r1 (V v1))
                                         putInstruction (Assign r2 (V v2))
                                         putInstruction (Assign r3 (BinOp op (R r1) (R r2)))
-                                        -- tell [("BinaryOp", [Assign r1 (V v1),
-                                        --                     Assign r2 (V v2),
-                                        --                     Assign r3 (BinOp op (R r1) (R r2))], Return (R r3))]
                                         return (R r3)
 blockConvert (CC.MkClosure v xs)   = do reg <- getRegister
                                         vals <- mapM blockConvert xs
-                                        -- let vals = map getReturnVal bbvals
                                         putInstruction (Assign reg (CIR.MkClosure v vals))
                                         return (R reg)
-                                        -- return (concat bbvals ++ [("MkClosure", [Assign reg (CIR.MkClosure v vals)], Return (R reg))])
-blockConvert (IrIfZ c t f)         = do vc <- blockConvert c
+blockConvert (IrIfZ c t f)         = do cond     <- getLoc "cond"
+                                        then_loc <- getLoc "then"
+                                        else_loc <- getLoc "else"
+                                        if_cont  <- getLoc "ifcont"
+                                        rt  <- getRegister
+                                        rf  <- getRegister
+                                        ret <- getRegister
+                                        endBlock cond (Jump cond)
+                                        -- Bloque Cond
+                                        vc <- blockConvert c
+                                        endBlock then_loc (CondJump (Eq (C 0) vc) then_loc else_loc)
+                                        -- Bloque Then
                                         vt <- blockConvert t
+                                        (_, fromThen, _) <- get
+                                        putInstruction (Assign rt (V vt))
+                                        endBlock else_loc (Jump if_cont)
+                                        -- Bloque Else 
                                         vf <- blockConvert f
-                                        rc <- getRegister
-                                        rt <- getRegister
-                                        rf <- getRegister
-                                        reg <- getRegister
-                                        let cond  = ("cond", [Assign rc (V vc)], CondJump (Eq (C 0) vc) "then" "else")
-                                        let then' = ("then", [Assign rt (V vt)], Jump "ifcont")
-                                        let else' = ("else", [Assign rf (V vf)], Jump "ifcont")
-                                        let ifcont = ("ifcont", [], Return (R reg))
-                                        putInstruction (Assign reg (Phi [("then", vt), ("else", vf)]))
-                                        tell [cond, then', else', ifcont]
-                                        return (R reg)
-                                        -- return (cond ++ then' ++ else' ++ [("ifcont", [Assign reg (Phi [("then", vt), ("else", vf)])], Return (R reg))])
-blockConvert _ = undefined 
--- blockConvert (IrLet v t1 t2)       = undefined
+                                        (_, fromElse, _) <- get
+                                        putInstruction (Assign rf (V vf))
+                                        endBlock if_cont (Jump if_cont)
+                                        -- Bloque If Cont
+                                        putInstruction (Assign ret (Phi [(fromThen, R rt), (fromElse, R rf)]))
+                                        return (R ret)
+blockConvert (IrLet v t1 t2)       = do vt1 <- blockConvert t1
+                                        loc <- getLoc v
+                                        r1 <- getRegister
+                                        putInstruction (Assign (Temp v) (V vt1))
+                                        blockConvert t2
 
-
-getTerminatorVal :: State Int [BasicBlock] -> State Int Val
-getTerminatorVal t1 = do s <- get
-                         let (bbs, s') = runState t1 s
-                         let val = getReturnVal bbs
-                         put s'
-                         return val
-
-getReturnVal :: [BasicBlock] -> Val
-getReturnVal bb = val
-                where (_, _, Return val) = last bb
-                  
-
-getRegister :: Monad m => StateT (Int, [Inst]) m Reg
-getRegister = do (s, inst) <- get
-                 put (s+1, inst)
+-- Funciones auxiliares --
+getRegister :: Monad m => StateT (Int, Loc, [Inst]) m Reg
+getRegister = do (s, loc, insts) <- get
+                 put (s+1, loc, insts)
                  return (Temp ("R" ++ show s))
 
-putInstruction :: Monad m => Inst -> StateT (Int, [Inst]) m ()
-putInstruction new_inst = modify (\(n, inst) -> (n, inst++[new_inst]))
+getLoc :: Monad m => Loc -> StateT (Int, Loc, [Inst]) m Loc
+getLoc loc = do (s, l, i) <- get
+                put (s+1, l, i)
+                return (loc ++ "_" ++ show s)
+
+putInstruction :: Monad m => Inst -> StateT (Int, Loc, [Inst]) m ()
+putInstruction new_inst = modify (\(n, loc, inst) -> (n, loc, inst++[new_inst]))
+
+endBlock :: Loc -> Terminator -> StateT (Int, Loc, [Inst]) (Writer [BasicBlock]) ()
+endBlock new_loc term = do (s, loc, inst) <- get
+                           tell [(loc, inst, term)]
+                           put (s, new_loc, [])
