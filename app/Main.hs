@@ -32,10 +32,30 @@ import Elab ( elab, desugarDecl, elab', desugarTy )
 import CEK ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
+    ( when,
+      MonadState(get, put),
+      MonadError(throwError),
+      MonadPCF,
+      addDecl,
+      addTy,
+      catchErrors,
+      failPCF,
+      lookupDecl,
+      printPCF,
+      runPCF,
+      modify )
 import TypeChecker ( tc, tcDecl )
 import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
-import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC )
+import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC ) 
+import ClosureCompile ( runCC )
 import Common ( dropExtension )
+import System.Process ( system )
+import Data.Text.Lazy.IO as TIO (writeFile)
+-- import qualified Data.ByteString.Lazy as TIO (writeFile)
+import LLVM.Pretty
+import CIR ( runCanon )
+import InstSel ( codegen )
+import LLVM.AST ( Module )
 
 prompt :: String
 prompt = "PCF> "
@@ -60,6 +80,12 @@ main = execParser opts >>= go
                                return ()
     go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
                                  return ()
+    go (Closurecompile, files) = do runPCF $ catchErrors $ closureCompileFiles files
+                                    -- let llvm = "323"
+                                    -- let commandline = "clang -Wno-override-module output.ll runtime.c -lgc -o prog"
+                                    -- liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+                                    -- liftIO $ system commandline
+                                    return ()
     go (Run,files) = do
       bytecode <- mapM bcRead files 
       runPCF $ catchErrors $ mapM runBC bytecode
@@ -131,6 +157,37 @@ byteCompileFile f = do
     let outputFile = dropExtension filename ++ ".byte"
     printPCF ("Generando archivo compilado "++outputFile++"..."++show bytecode)
     liftIO $ bcWrite bytecode outputFile
+
+-- Closurecompile
+closureCompileFiles :: MonadPCF m => [FilePath] -> m ()
+closureCompileFiles []     = return ()
+closureCompileFiles (x:xs) = do
+        closureCompileFile x
+        closureCompileFiles xs
+
+closureCompileFile :: MonadPCF m => FilePath -> m ()
+closureCompileFile f = do
+    printPCF ("Abriendo "++f++"...")
+    let filename = reverse(dropWhile isSpace (reverse f))
+    x <- liftIO $ catch (readFile filename)
+               (\e -> do let err = show (e :: IOException)
+                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
+                         return "")
+    sDecls <- parseIO filename program x
+    mapM_ handleDecl sDecls
+    decls <- mapM desugarDecl sDecls
+    let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+    -- TODO: borrar print
+    printPCF ("Declaraciones pre CC\n" ++ show declTerms)
+    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
+    printPCF (show (runCanon (runCC declTerms)))
+    let llvm = codegen (runCanon (runCC declTerms))
+    let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
+    liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+    liftIO $ system commandline
+    liftIO $ system "./prog"
+    return ()
+
 
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of
