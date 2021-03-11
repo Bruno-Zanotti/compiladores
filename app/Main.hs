@@ -45,17 +45,18 @@ import MonadPCF
       runPCF,
       modify )
 import TypeChecker ( tc, tcDecl )
+import Optimizations
 import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
 import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC ) 
 import ClosureCompile ( runCC )
 import Common ( dropExtension )
 import System.Process ( system )
 import Data.Text.Lazy.IO as TIO (writeFile)
--- import qualified Data.ByteString.Lazy as TIO (writeFile)
 import LLVM.Pretty
 import CIR ( runCanon )
 import InstSel ( codegen )
 import LLVM.AST ( Module )
+import Data.Maybe (catMaybes)
 
 prompt :: String
 prompt = "PCF> "
@@ -175,13 +176,21 @@ closureCompileFile f = do
                          return "")
     sDecls <- parseIO filename program x
     mapM_ handleDecl sDecls
-    decls <- mapM desugarDecl sDecls
+    decls <- catMaybes <$> mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
-    -- TODO: borrar print
-    -- printPCF ("Declaraciones pre CC\n" ++ show declTerms)
-    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
-    printPCF (show (runCanon (runCC declTerms)))
+    -- TODO: borrar prints
+    printPCF "\nSin OPT"
+    mapM_ (\x-> printPCF (">> " ++ show x)) declTerms
+    optDecls <- optimization declTerms
     let llvm = codegen (runCanon (runCC declTerms))
+    let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
+    liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+    liftIO $ system commandline
+    liftIO $ system "./prog"
+    printPCF "\nOPT"
+    mapM_ (\x-> printPCF (">> " ++ show x)) optDecls
+    -- printPCF (show (runCanon (runCC declTerms)))
+    let llvm = codegen (runCanon (runCC optDecls))
     let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
     liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
     liftIO $ system commandline
@@ -230,12 +239,14 @@ handleDecl (SDType _ n sty) = do
                         ty <- desugarTy sty
                         addTy n ty
 handleDecl d = do
-        d' <- desugarDecl d
-        let Decl p' x' b' = d'
-        let tt = elab' b'
-        tcDecl (Decl p' x' tt)
-        te <- eval tt
-        addDecl (Decl p' x' te)
+        md <- desugarDecl d
+        case md of
+          Nothing -> return ()
+          Just d' -> do let Decl p' x' b' = d'
+                        let tt = elab' b'
+                        tcDecl (Decl p' x' tt)
+                        te <- eval tt
+                        addDecl (Decl p' x' te)
 
 data Command = Compile CompileForm
              | Print String

@@ -36,7 +36,9 @@ data STy =
 type Name = String
 
 newtype Const = CNat Int
-  deriving Show
+
+instance Show Const where
+  show (CNat a) = show a
 
 data UnaryOp = Succ | Pred
   deriving Show
@@ -48,7 +50,11 @@ data BinaryOp = Sum | Res
 data Decl a =
     Decl { declPos :: Pos, declName :: Name, declBody :: a }
   | Eval a
-  deriving (Show,Functor)
+  deriving (Functor)
+
+instance (Show a) => Show (Decl a) where
+  show (Decl p name body) = "Decl " ++ name ++ ": " ++ show body
+  show (Eval a) = "Eval " ++ show a
 
 -- | tipo de datos de declaraciones azucaradas
 data SDecl a =
@@ -71,15 +77,32 @@ data Tm info var =
   | Fix info Name Ty Name Ty (Tm info var)
   | IfZ info (Tm info var) (Tm info var) (Tm info var)
   | Let info Name Ty (Tm info var) (Tm info var)
-  deriving (Show, Functor)
+  deriving (Functor)
+
+instance (Show var) => Show (Tm info var) where
+  show (V _ v)                 = show v
+  show (Const _ c)             = show c
+  show (Lam _ f ty tm)         = "Fun " ++ "(" ++ f ++ ":" ++ show ty ++ ")" ++ " -> " ++ show tm
+  show (App _ tm1 tm2)         = go tm1 ++ " " ++ go tm2
+    where go (V _ v)     = show v
+          go (Const _ c) = show c
+          go t           = "(" ++ show t ++ ")"
+  show (BinaryOp _ op tm1 tm2) = show op ++ " " ++ show tm1 ++ " " ++ show tm2
+  show (Fix _ f fty v vty tm)  = "Fix " ++ "(" ++ show f ++ " : " ++ show fty ++ ")" ++ ") (" ++ show v ++ " : " ++ show vty ++ " )" ++ " -> " ++ show tm
+  show (IfZ _ tm1 tm2 tm3)     = "IfZ " ++ show tm1 ++ " then " ++ show tm2 ++ " else " ++ show tm3
+  show (Let _ name ty tm1 tm2) = "Let " ++ show name ++ " : " ++ show ty ++ " = " ++ show tm1 ++ " in " ++ show tm2
 
 type NTerm = Tm Pos Name   -- ^ 'Tm' tiene 'Name's como variables ligadas y libres, guarda posición
 type Term = Tm Pos Var     -- ^ 'Tm' con índices de De Bruijn como variables ligadas, different type of variables, guarda posición
 
+
 data Var = 
     Bound !Int
   | Free Name
-  deriving Show
+
+instance Show Var where
+  show (Free v)  = v
+  show (Bound n) = "(Bound " ++ show n ++ ")"
 
 -- | AST de los términos con azúcar sintáctico. 
 --   - info es información extra que puede llevar cada nodo. 
