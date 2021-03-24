@@ -175,26 +175,28 @@ closureCompileFile f = do
                          hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
                          return "")
     sDecls <- parseIO filename program x
-    mapM_ handleDecl sDecls
+    -- mapM_ handleDecl sDecls
     decls <- catMaybes <$> mapM desugarDecl sDecls
     let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+    mapM_ tcDecl declTerms
+    mapM_ addDecl declTerms
     -- TODO: borrar prints
     printPCF "\nSin OPT"
     mapM_ (\x-> printPCF (">> " ++ show x)) declTerms
     optDecls <- optimization declTerms
+    printPCF (show (runCanon (runCC declTerms)))
     let llvm = codegen (runCanon (runCC declTerms))
     let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
     liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
     liftIO $ system commandline
     liftIO $ system "./prog"
-    printPCF "\nOPT"
-    mapM_ (\x-> printPCF (">> " ++ show x)) optDecls
-    -- printPCF (show (runCanon (runCC declTerms)))
-    let llvm = codegen (runCanon (runCC optDecls))
-    let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
-    liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
-    liftIO $ system commandline
-    liftIO $ system "./prog"
+    -- printPCF "\nOPT"
+    -- mapM_ (\x-> printPCF (">> " ++ show x)) optDecls
+    -- let llvm = codegen (runCanon (runCC optDecls))
+    -- let commandline = "clang -Wno-override-module output2.ll src/runtime.c -lgc -o prog"
+    -- liftIO $ TIO.writeFile "output2.ll" (ppllvm llvm)
+    -- liftIO $ system commandline
+    -- liftIO $ system "./prog"
     return ()
 
 

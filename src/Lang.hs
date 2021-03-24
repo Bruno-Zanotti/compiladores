@@ -88,9 +88,9 @@ instance (Show var) => Show (Tm info var) where
           go (Const _ c) = show c
           go t           = "(" ++ show t ++ ")"
   show (BinaryOp _ op tm1 tm2) = show op ++ " " ++ show tm1 ++ " " ++ show tm2
-  show (Fix _ f fty v vty tm)  = "Fix " ++ "(" ++ show f ++ " : " ++ show fty ++ ")" ++ ") (" ++ show v ++ " : " ++ show vty ++ " )" ++ " -> " ++ show tm
+  show (Fix _ f fty v vty tm)  = "Fix " ++ "(" ++ f ++ " : " ++ show fty ++ ")" ++ ") (" ++ show v ++ " : " ++ show vty ++ " )" ++ " -> " ++ show tm
   show (IfZ _ tm1 tm2 tm3)     = "IfZ " ++ show tm1 ++ " then " ++ show tm2 ++ " else " ++ show tm3
-  show (Let _ name ty tm1 tm2) = "Let " ++ show name ++ " : " ++ show ty ++ " = " ++ show tm1 ++ " in " ++ show tm2
+  show (Let _ name ty tm1 tm2) = "Let " ++ name ++ " : " ++ show ty ++ " = " ++ show tm1 ++ " in " ++ show tm2
 
 type NTerm = Tm Pos Name   -- ^ 'Tm' tiene 'Name's como variables ligadas y libres, guarda posición
 type Term = Tm Pos Var     -- ^ 'Tm' con índices de De Bruijn como variables ligadas, different type of variables, guarda posición

@@ -16,41 +16,42 @@ import MonadPCF
 import Common ( Pos(NoPos) )
 
 optimization :: MonadPCF m => [Decl Term] -> m [Decl Term]
-optimization (df@(Decl _ f (Lam _ v _ t1)) :xs) = do op <- optimization (inLineExpansion xs f t1)
-                                                     return (df:op)
-optimization (decl:xs) =  do op <- optimization xs
-                             return (decl:op)
 optimization [] = return []
--- optimization decl = failPCF $ "Declaración inválida:\n" ++ show decl
---  Decl f: Fun (x:NatTy) -> Fun (y:NatTy) -> Res (Bound 1) (Bound 0) ----->>>> f 3 ---->>> APP (Fun (y:NatTy) -> Res (Bound 1) (Bound 0)) 3
+optimization xs = inLineExpansion xs 0
 
-inLineExpansion :: [Decl Term] -> Name -> Term -> [Decl Term]
-inLineExpansion (Decl p name term :xs) f def = Decl p name (evalState (expand term f def) 0) : inLineExpansion xs f def
--- inLineExpansion (decl : xs) f def = decl : inLineExpansion xs f def
-inLineExpansion [] _ _ = []
+inLineExpansion :: MonadPCF m => [Decl Term] -> Int -> m [Decl Term]
+inLineExpansion [] _ = return []
+inLineExpansion xs 0 = return xs
+inLineExpansion xs n = do xs' <- mapM expandDecl xs
+                          inLineExpansion xs' (n-1)
 
--- let f1 (x y:Nat):Nat = res x 1 => res (Bound 1) 1
--- let r (z :Nat): Nat = f1 (Bound 0) 1 => fun (z: Nat) = res (Bound 0) 1 =>  
--- let a: Nat = r 1
+expandDecl :: MonadPCF m => Decl Term -> m (Decl Term)
+expandDecl (Decl i n t) = Decl i n <$> expand t
 
-expand :: Term -> Name -> Term -> State Int Term
-expand (Lam p x ty t) f def         = Lam p x ty <$> expand t f def 
-expand (App p v@(V p' (Free f')) arg) f def = if f' == f
-                                              then case arg of
-                                                     V p (Free v') -> return (subst (V p (Free v')) def)
-                                                     V p (Bound n) -> return (subst (V p (Bound n)) def)
-                                                     Const p c     -> return (subst (Const p c) def)
-                                                     _             -> do var <- fresh "z"
-                                                                         v' <- expand arg f def 
-                                                                         let a = subst (V NoPos (Free var)) def
-                                                                         return (Let NoPos var NatTy v' a)
-                                                                        --  return (subst (go v') def)
-                                              else App p' v <$> expand arg f def
-expand (App p t u) f def            = App p <$> expand t f def <*> expand u f def
-expand (Fix p f' fty x xty t) f def = Fix p f' fty x xty <$> expand t f def 
-expand (IfZ p c t e) f def          = IfZ p <$> expand c f def <*> expand t f def <*> expand e f def
-expand (BinaryOp i o t1 t2) f def   = BinaryOp i o <$> expand t1 f def <*> expand t2 f def
-expand t _ _                        = return t
+expand :: MonadPCF m => Term -> m Term
+expand fv@(V p (Free v)) = do def <- lookupDecl v
+                              case def of
+                                Nothing          -> return fv
+                                Just IfZ {}      -> return fv
+                                Just BinaryOp {} -> return fv
+                                Just App {}      -> return fv
+                                Just t           -> return t
+expand (Lam p x ty t)         = Lam p x ty <$> expand t
+expand (App _ (Lam _ _ _ t) arg) = case arg of
+                                     (V _ (Free _)) -> return (subst arg t)
+                                    --  (V p (Bound n)) -> return (subst (V p (Bound (n+1))) t)
+                                     (Const _ _) -> return (subst arg t)
+                                     _           -> do let z = "z123"
+                                                      --  z' <- fresh "z"
+                                                      --  arg' <- expand arg
+                                                      --  let t' = subst (V NoPos (Free z)) t
+                                                       return (Let NoPos z NatTy arg t)
+expand (App p t u)            = App p <$> expand t <*> expand u
+expand (Fix p f' fty x xty t) = Fix p f' fty x xty <$> expand t 
+expand (IfZ p c t e)          = IfZ p <$> expand c <*> expand t <*> expand e
+expand (Let p f ty t1 t2)     = Let p f ty <$> expand t1 <*> expand t2
+expand (BinaryOp i o t1 t2)   = BinaryOp i o <$> expand t1<*> expand t2
+expand t                      = return t
 
 fresh :: Name -> State Int Name
 fresh name = do s <- get

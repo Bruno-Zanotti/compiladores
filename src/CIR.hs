@@ -140,7 +140,6 @@ blockConvert (IrIfZ c t f)         = do cond     <- getLoc "cond"
                                         putInstruction (Assign ret (Phi [(fromThen, R rt), (fromElse, R rf)]))
                                         return (R ret)
 blockConvert (IrLet v t1 t2)       = do vt1 <- blockConvert t1
-                                        loc <- getLoc v
                                         r1 <- getRegister
                                         putInstruction (Assign (Temp v) (V vt1))
                                         blockConvert t2
