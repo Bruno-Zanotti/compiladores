@@ -22,3 +22,5 @@ stack ghci
 
 stack ghci src/TypeChecker.hs
 ```
+Para el error de "gc.h not found" usar:
+sudo apt-get install -y libgc-dev
