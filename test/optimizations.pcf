@@ -1,0 +1,7 @@
+# In Line Expansion
+
+let sum3 (x: Nat):Nat = sum x 3
+let r1 (x y: Nat):Nat = sum (sum3 x) (sum3 y)
+let r:Nat = r1 1 2
+
+# Resultado: 9

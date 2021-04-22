@@ -1,0 +1,29 @@
+# Ifz
+
+# Test 1: true true
+let a:Nat = ifz 0 then (ifz 0 then 0 else 1) else 1
+let t2:Nat = ifz a
+             then 0 
+             else 1
+
+# Test 2: true false
+let b:Nat = ifz 0 then (ifz 1 then 1 else 0) else 1
+let t1:Nat = ifz b
+             then 0 
+             else 1
+
+# Test 3: false true
+let c:Nat = ifz 1 then 1 else (ifz 0 then 0 else 1)
+let t3:Nat = ifz c
+             then 0 
+             else 1
+
+# Test 4: false false
+let d:Nat = ifz 1 then 1 else (ifz 1 then 1 else 0)
+let t4:Nat = ifz d
+             then 0 
+             else 1
+
+# Test
+# Resultado: 0
+let r:Nat = sum (sum t1 t2) (sum t3 t4) 

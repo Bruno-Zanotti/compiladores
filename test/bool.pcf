@@ -1,0 +1,21 @@
+# Bool
+
+# type
+type Bool = Nat
+
+# values
+let true:Bool  = 0
+let false:Bool = 1
+
+# functions
+let ifthenelse:Bool = fun(c:Bool) -> fun(t1:Bool) -> fun(t2:Bool) -> ifz c then t1 else t2
+let and:Bool = fun(a:Bool) -> fun(b:Bool) -> ifz a then (ifz b then 0 else 1) else 1
+let or:Bool  = fun(a:Bool) -> fun(b:Bool) -> ifz a then 0 else (ifz b then 0 else 1)
+let not:Bool = fun(a:Bool) -> ifz a then 1 else 0
+let xor:Bool = fun(a:Bool) -> fun(b:Bool) -> or (and a b) (and (not a) (not b))
+
+# test
+# resultado: 0 (true)
+let r1:Bool = ifthenelse (or true false) (xor false false) false
+let r2:Bool = ifthenelse (and true false) false (and true true)
+let r:Bool = ifthenelse (and r1 r2) true false

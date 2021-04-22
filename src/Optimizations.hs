@@ -17,7 +17,7 @@ import Common ( Pos(NoPos) )
 
 optimization :: MonadPCF m => [Decl Term] -> m [Decl Term]
 optimization [] = return []
-optimization xs = inLineExpansion xs 0
+optimization xs = inLineExpansion xs 5
 
 inLineExpansion :: MonadPCF m => [Decl Term] -> Int -> m [Decl Term]
 inLineExpansion [] _ = return []
@@ -36,16 +36,12 @@ expand fv@(V p (Free v)) = do def <- lookupDecl v
                                 Just BinaryOp {} -> return fv
                                 Just App {}      -> return fv
                                 Just t           -> return t
-expand (Lam p x ty t)         = Lam p x ty <$> expand t
+expand (Lam p x ty t)            = Lam p x ty <$> expand t
 expand (App _ (Lam _ _ _ t) arg) = case arg of
                                      (V _ (Free _)) -> return (subst arg t)
-                                    --  (V p (Bound n)) -> return (subst (V p (Bound (n+1))) t)
                                      (Const _ _) -> return (subst arg t)
-                                     _           -> do let z = "z123"
-                                                      --  z' <- fresh "z"
-                                                      --  arg' <- expand arg
-                                                      --  let t' = subst (V NoPos (Free z)) t
-                                                       return (Let NoPos z NatTy arg t)
+                                     _           -> do arg' <- expand arg
+                                                       return (Let NoPos "z" NatTy arg t)
 expand (App p t u)            = App p <$> expand t <*> expand u
 expand (Fix p f' fty x xty t) = Fix p f' fty x xty <$> expand t 
 expand (IfZ p c t e)          = IfZ p <$> expand c <*> expand t <*> expand e

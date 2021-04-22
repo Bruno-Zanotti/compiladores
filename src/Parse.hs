@@ -248,15 +248,16 @@ data Mode = Interactive
             | Bytecompile
             | Closurecompile
             | Run
+            | Optimized
 
 -- | Parser de banderas
 parseMode :: OptApp.Parser Mode
-parseMode =
-      OptApp.flag' Typecheck (OptApp.long "typecheck" <> OptApp.short 't' <> OptApp.help "Solo chequear tipos")
-  OptApp.<|> OptApp.flag' Bytecompile (OptApp.long "bytecompile" <> OptApp.short 'c' <> OptApp.help "Compilar a la BVM")
-  OptApp.<|> OptApp.flag' Closurecompile (OptApp.long "cc" <> OptApp.short 'C' <> OptApp.help "Compilar Funciones de Alto Orden")
-  OptApp.<|> OptApp.flag' Run (OptApp.long "run" <> OptApp.short 'r' <> OptApp.help "Ejecutar bytecode en la BVM")
-  OptApp.<|> OptApp.flag Interactive Interactive (OptApp.long "interactive" <> OptApp.short 'i' <> OptApp.help "Ejecutar en forma interactiva" )
+parseMode =  OptApp.flag' Typecheck               (OptApp.long "typecheck"   <> OptApp.short 't' <> OptApp.help "Solo chequear tipos")
+  OptApp.<|> OptApp.flag' Bytecompile             (OptApp.long "bytecompile" <> OptApp.short 'c' <> OptApp.help "Compilar a la BVM")
+  OptApp.<|> OptApp.flag' Run                     (OptApp.long "run"         <> OptApp.short 'r' <> OptApp.help "Ejecutar bytecode en la BVM")
+  OptApp.<|> OptApp.flag  Interactive Interactive (OptApp.long "interactive" <> OptApp.short 'i' <> OptApp.help "Ejecutar en forma interactiva" )
+  OptApp.<|> OptApp.flag' Closurecompile          (OptApp.long "cc"          <> OptApp.short 'C' <> OptApp.help "Compilar Funciones de Alto Orden")
+  OptApp.<|> OptApp.flag' Optimized               (OptApp.long "optimized"   <> OptApp.short 'O' <> OptApp.help "Compilar y Optimizar")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
 parseArgs :: OptApp.Parser (Mode,[FilePath])
