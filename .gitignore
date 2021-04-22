@@ -15,5 +15,4 @@ compiladores.cabal
 *.byte
 *.out
 output.ll
-test/*
 prog

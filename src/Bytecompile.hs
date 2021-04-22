@@ -104,7 +104,6 @@ bt t                       = do bt <- bc t
 
 bytecompileModule :: MonadPCF m => SNTerm -> m Bytecode
 bytecompileModule st = do t <- elab st
-                          -- failPCF ("Error en Ejecución a Bytecode\n" ++ show st ++ "\n" ++ show t)
                           byte <- bc t
                           return (byte ++ [PRINT, STOP])
 

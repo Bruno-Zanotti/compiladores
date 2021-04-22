@@ -1,0 +1,15 @@
+# Math
+
+# multiplicación
+let mul:Nat = fix (f:Nat->Nat->Nat) (m:Nat) -> fun(n:Nat) -> ifz n then 0 else (ifz m then 0 else (sum m (f m (pred n))))
+# potencia
+let pow:Nat = fix (f:Nat->Nat->Nat) (m:Nat) -> fun(n:Nat) -> ifz n then 1 else mul m (f m (pred n))
+# factorial
+let fact:Nat = fix (f:Nat->Nat) (m:Nat) -> ifz m then 1 else mul m (f (pred m))
+# Fibonacci
+let fib:Nat = fix (f: Nat->Nat) (m:Nat) -> ifz m then 0 else (ifz pred m then 1 else sum (f (pred m)) (f (pred (pred m))))
+
+# test
+# resultado: 21
+
+let r:Nat = fib (res (fact 4) (pow 2 4)) 

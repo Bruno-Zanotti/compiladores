@@ -41,9 +41,12 @@ closureConvert (Lam _ x _ t)         = do n <- fresh ""
                                           clo <- fresh "clo"
                                           let irt' = foldr (\(v, i) t -> IrLet v (IrAccess (IrVar clo) i) t) irt (zip vars [1..])
                                           writer (MkClosure n (map IrVar vars), [IrFun n [clo, fx] irt'])
-closureConvert (App _ f x)           = do clos <- closureConvert f
+closureConvert (App _ (V _ (Free n)) x) = do irx <- closureConvert x
+                                             return (IrCall (IrAccess (IrVar n) 0) [IrVar n, irx])
+closureConvert (App _ f x)           = do irf <- closureConvert f
                                           irx <- closureConvert x
-                                          return (IrCall (IrAccess clos 0) [clos, irx])
+                                          clo <- fresh "clo"
+                                          return (IrLet clo irf (IrCall (IrAccess (IrVar clo) 0) [IrVar clo, irx]))
 closureConvert (BinaryOp _ op t1 t2) = do irt1 <- closureConvert t1
                                           irt2 <- closureConvert t2
                                           return (IrBinaryOp op irt1 irt2)

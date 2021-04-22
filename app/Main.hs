@@ -45,17 +45,18 @@ import MonadPCF
       runPCF,
       modify )
 import TypeChecker ( tc, tcDecl )
+import Optimizations
 import Options.Applicative ( execParser, info, helper, (<**>), fullDesc, progDesc, header )
 import Bytecompile ( bcRead, bcWrite, bytecompileModule, runBC ) 
 import ClosureCompile ( runCC )
 import Common ( dropExtension )
 import System.Process ( system )
 import Data.Text.Lazy.IO as TIO (writeFile)
--- import qualified Data.ByteString.Lazy as TIO (writeFile)
 import LLVM.Pretty
 import CIR ( runCanon )
 import InstSel ( codegen )
 import LLVM.AST ( Module )
+import Data.Maybe (catMaybes)
 
 prompt :: String
 prompt = "PCF> "
@@ -68,32 +69,24 @@ main = execParser opts >>= go
            <> progDesc "Compilador de PCF" 
            <> header "Compilador de PCF de la materia Compiladores 2020")
     go :: (Mode,[FilePath]) -> IO ()
-    go (Interactive,files) =
-        do runPCF (runInputT defaultSettings (main' files))
-           return ()
-    go (Typecheck, files) = do err <- runPCF $ catchErrors $ typeCheckFiles files
-                               case err of
-                                 Left _ -> return()
-                                 Right e -> case e of
-                                              Nothing -> return()
-                                              Just () -> putStrLn "El programa tipa correctamente"
-                               return ()
-    go (Bytecompile, files) = do runPCF $ catchErrors $ byteCompileFiles files
-                                 return ()
-    go (Closurecompile, files) = do runPCF $ catchErrors $ closureCompileFiles files
-                                    -- let llvm = "323"
-                                    -- let commandline = "clang -Wno-override-module output.ll runtime.c -lgc -o prog"
-                                    -- liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
-                                    -- liftIO $ system commandline
+    go (Interactive,files) = do runPCF (runInputT defaultSettings (main' files)); return ()
+    go (Typecheck, files)  = do err <- runPCF $ catchErrors $ mapFiles typeCheckFile files
+                                case err of
+                                  Left _ -> return()
+                                  Right e -> case e of
+                                               Nothing -> return()
+                                               Just () -> putStrLn "El programa tipa correctamente"
+                                return ()
+    go (Bytecompile, files)    = do runPCF $ catchErrors $ mapFiles byteCompileFile files; return ()
+    go (Closurecompile, files) = do runPCF $ catchErrors $ mapFiles (closureCompileFile False) files; return ()
+    go (Optimized, files) = do runPCF $ catchErrors $ mapFiles (closureCompileFile True) files; return ()
+    go (Run,files)             = do bytecode <- mapM bcRead files 
+                                    runPCF $ catchErrors $ mapM runBC bytecode
                                     return ()
-    go (Run,files) = do
-      bytecode <- mapM bcRead files 
-      runPCF $ catchErrors $ mapM runBC bytecode
-      return ()
           
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
 main' args = do
-        lift $ catchErrors $ compileFiles args
+        lift $ catchErrors $ mapFiles compileFile args
         s <- lift get
         when (inter s) $ liftIO $ putStrLn
           (  "Entorno interactivo para PCF0.\n"
@@ -114,49 +107,57 @@ main' args = do
 ------------------------------------------
 
 -- Typecheck
-typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
-typeCheckFiles []     = return ()
-typeCheckFiles (x:xs) = do
-        typeCheckFile x
-        typeCheckFiles xs
-
 typeCheckFile :: MonadPCF m => FilePath -> m ()
 typeCheckFile f = do
-    printPCF ("Abriendo "++f++"...")
-    let filename = reverse(dropWhile isSpace (reverse f))
-    x <- liftIO $ catch (readFile filename)
-               (\e -> do let err = show (e :: IOException)
-                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
-                         return "")
-    decls <- parseIO filename program x
+    decls <- openFile f
     snterm <- declsToTerm decls
     term <- elab snterm
     tc term []
     return ()
 
 -- Bytecompile
-byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
-byteCompileFiles []     = return ()
-byteCompileFiles (x:xs) = do
-        byteCompileFile x
-        byteCompileFiles xs
-
--- TODO: unificar con funcion CompileFile
 byteCompileFile :: MonadPCF m => FilePath -> m ()
 byteCompileFile f = do
+    decls <- openFile f
+    mapM_ handleDecl decls
+    term <- declsToTerm decls
+    bytecode <- bytecompileModule term
+    let outputFile = dropExtension (reverse(dropWhile isSpace (reverse f))) ++ ".byte"
+    printPCF ("Generando archivo compilado "++outputFile++"..."++show bytecode)
+    liftIO $ bcWrite bytecode outputFile
+
+-- Closurecompile
+closureCompileFile :: MonadPCF m => Bool -> FilePath -> m ()
+closureCompileFile optimized f = do
+    sDecls <- openFile f
+    decls <- catMaybes <$> mapM desugarDecl sDecls
+    let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+    mapM_ tcDecl declTerms
+    mapM_ addDecl declTerms
+
+    printPCF "\nDeclaraciones:\n"
+    decls <- if optimized then optimization declTerms else return declTerms
+    mapM_ (\x-> printPCF (">> " ++ show x)) decls
+    let llvm = codegen (runCanon (runCC decls))
+    liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+    liftIO $ system "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
+    liftIO $ system "./prog"
+    return ()
+
+mapFiles :: MonadPCF m => (FilePath -> m ()) -> [FilePath] -> m ()
+mapFiles f []     = return ()
+mapFiles f (x:xs) = do f x
+                       mapFiles f xs
+
+openFile :: MonadPCF m => FilePath -> m [SDecl SNTerm]
+openFile f = do
     printPCF ("Abriendo "++f++"...")
     let filename = reverse(dropWhile isSpace (reverse f))
     x <- liftIO $ catch (readFile filename)
                (\e -> do let err = show (e :: IOException)
                          hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
                          return "")
-    decls <- parseIO filename program x
-    mapM_ handleDecl decls
-    term <- declsToTerm decls
-    bytecode <- bytecompileModule term
-    let outputFile = dropExtension filename ++ ".byte"
-    printPCF ("Generando archivo compilado "++outputFile++"..."++show bytecode)
-    liftIO $ bcWrite bytecode outputFile
+    parseIO filename program x
 
 -- Closurecompile
 closureCompileFiles :: MonadPCF m => [FilePath] -> m ()
@@ -202,22 +203,9 @@ declsToTerm (x:_) = do failPCF $ "Declaración invalida "++ show x
 
 ------------------------------------------
 
-compileFiles ::  MonadPCF m => [String] -> m ()
-compileFiles []     = return ()
-compileFiles (x:xs) = do
-        modify (\s -> s { lfile = x, inter = False })
-        compileFile x
-        compileFiles xs
-
 compileFile ::  MonadPCF m => String -> m ()
 compileFile f = do
-    printPCF ("Abriendo "++f++"...")
-    let filename = reverse(dropWhile isSpace (reverse f))
-    x <- liftIO $ catch (readFile filename)
-               (\e -> do let err = show (e :: IOException)
-                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
-                         return "")
-    decls <- parseIO filename program x
+    decls <- openFile f
     mapM_ handleDecl decls
 
 parseIO ::  MonadPCF m => String -> P a -> String -> m a
@@ -230,12 +218,14 @@ handleDecl (SDType _ n sty) = do
                         ty <- desugarTy sty
                         addTy n ty
 handleDecl d = do
-        d' <- desugarDecl d
-        let Decl p' x' b' = d'
-        let tt = elab' b'
-        tcDecl (Decl p' x' tt)
-        te <- eval tt
-        addDecl (Decl p' x' te)
+        md <- desugarDecl d
+        case md of
+          Nothing -> return ()
+          Just d' -> do let Decl p' x' b' = d'
+                        let tt = elab' b'
+                        tcDecl (Decl p' x' tt)
+                        te <- eval tt
+                        addDecl (Decl p' x' te)
 
 data Command = Compile CompileForm
              | Print String

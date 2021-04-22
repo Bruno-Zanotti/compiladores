@@ -27,7 +27,7 @@ import Lang
       STy(SNatTy, SFunTy, SNamedTy),
       SDecl(SDRec, SDLet, SDType) )
 import Subst
-import MonadPCF (lookupTy, MonadPCF, failPosPCF)
+import MonadPCF (lookupTy, MonadPCF, failPosPCF, addTy, failPCF)
 import Common ( Pos(NoPos) )
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
@@ -67,13 +67,15 @@ desugar (SLet p f ((x, xty):xs) ty st1 st2)   = desugar (SLet p f xs (SFunTy xty
 desugar (SRec p f [(x, xty)] ty st1 st2)      = desugar (SLet p f [] (SFunTy xty ty) (SFix p f (SFunTy xty ty) x xty st1) st2) 
 desugar (SRec p f (x:xs) ty st1 st2)          = desugar (SRec p f [x] (SFunTy (getType xs) ty) (SLam p xs st1) st2)
 
-desugarDecl :: MonadPCF m => SDecl SNTerm -> m (Decl NTerm)
-desugarDecl (SDLet p v [] _ st)            = Decl p v <$> desugar st
-desugarDecl (SDLet p v vs _ st)            = Decl p v <$> desugar (SLam p vs st)
+desugarDecl :: MonadPCF m => SDecl SNTerm -> m (Maybe (Decl NTerm))
+desugarDecl (SDLet p v [] _ st)            = Just . Decl p v <$> desugar st
+desugarDecl (SDLet p v vs _ st)            = Just . Decl p v <$> desugar (SLam p vs st)
 desugarDecl (SDRec p v [(x, xty)] ty st)   = desugarDecl (SDLet p v [] ty (SFix p v (SFunTy xty ty) x xty st))
 desugarDecl (SDRec p v ((x,xty):xs) ty st) = desugarDecl (SDRec p v [(x, xty)] (SFunTy (getType xs) ty) (SLam p xs st))
--- TODO: ver
-desugarDecl (SDType p _ _) = failPosPCF p "Declaración de tipo inválida"
+desugarDecl (SDType p v sty) = do ty <- desugarTy sty
+                                  addTy v ty
+                                  return Nothing
+desugarDecl _ = failPCF "Declaración inválida"
 
 desugarTy :: MonadPCF m => STy -> m Ty
 desugarTy SNatTy         = return NatTy
@@ -82,7 +84,7 @@ desugarTy (SNamedTy n)   = do
                           mty <- lookupTy n
                           case mty of
                             Just ty -> return ty
-                            _       -> failPosPCF NoPos $ "No existe el tipo: " ++ n
+                            _       -> failPCF $ "No existe el tipo: " ++ n
 
 getType :: [(a, STy)] -> STy
 getType [(_, xty)]    = xty

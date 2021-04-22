@@ -1,0 +1,3 @@
+let f1 (x2 y3:Nat):Nat = sum 4 x2
+let f2 (x y:Nat):Nat = sum (f1 x y) 2
+let n:Nat = f2 (sum 3 5) (res 2 1)
