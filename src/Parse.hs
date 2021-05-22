@@ -29,7 +29,7 @@ lexer :: Tok.TokenParser u
 lexer = Tok.makeTokenParser $
         emptyDef {
          commentLine    = "#",
-         reservedNames = ["let", "in", "rec", "fun", "fix", "then", "else", "succ", "pred", "ifz", "Nat", "type", "sum", "res"],
+         reservedNames = ["let", "in", "rec", "fun", "fix", "then", "else", "succ", "pred", "ifz", "Nat", "type", "sum", "res", reservedName, reservedName2],
          reservedOpNames = ["->",":","="]
         }
 

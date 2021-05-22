@@ -28,7 +28,7 @@ import Lang
       SDecl(SDRec, SDLet, SDType) )
 import Subst
 import MonadPCF (lookupTy, MonadPCF, failPosPCF, addTy, failPCF)
-import Common ( Pos(NoPos) )
+import Common ( Pos(NoPos), reservedName, reservedName2)
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -57,8 +57,8 @@ desugar (SApp p st1 st2)                      = App p <$> desugar st1 <*> desuga
 desugar (SUnaryOp p o Nothing)                = desugar(SLam p [("x", SNatTy)] (SUnaryOp p o (Just (SV p "x"))))
 desugar (SUnaryOp p Succ (Just st))           = BinaryOp p Sum <$> desugar st <*> desugar (SConst p (CNat 1))
 desugar (SUnaryOp p Pred (Just st))           = BinaryOp p Res <$> desugar st <*> desugar (SConst p (CNat 1))
-desugar (SBinaryOp p o Nothing Nothing)       = desugar(SLam p [("x", SNatTy), ("y", SNatTy)] (SBinaryOp p o (Just (SV p "x"))(Just (SV p "y"))))
-desugar (SBinaryOp p o (Just st) Nothing)     = desugar(SLam p [("x", SNatTy)] (SBinaryOp p o (Just st) (Just (SV p "x"))))
+desugar (SBinaryOp p o Nothing Nothing)       = desugar(SLam p [(reservedName, SNatTy), (reservedName2, SNatTy)] (SBinaryOp p o (Just (SV p reservedName))(Just (SV p reservedName2))))
+desugar (SBinaryOp p o (Just st) Nothing)     = desugar(SLam p [(reservedName, SNatTy)] (SBinaryOp p o (Just st) (Just (SV p reservedName))))
 desugar (SBinaryOp p o (Just st1) (Just st2)) = BinaryOp p o <$> desugar st1 <*> desugar st2
 desugar (SFix p f fty x xty st)               = Fix p f <$> desugarTy fty <*> return x <*> desugarTy xty <*> desugar st
 desugar (SIfZ p st1 st2 st3)                  = IfZ p <$> desugar st1 <*> desugar st2 <*> desugar st3

@@ -41,8 +41,6 @@ closureConvert (Lam _ x _ t)         = do n <- fresh ""
                                           clo <- fresh "clo"
                                           let irt' = foldr (\(v, i) t -> IrLet v (IrAccess (IrVar clo) i) t) irt (zip vars [1..])
                                           writer (MkClosure n (map IrVar vars), [IrFun n [clo, fx] irt'])
-closureConvert (App _ (V _ (Free n)) x) = do irx <- closureConvert x
-                                             return (IrCall (IrAccess (IrVar n) 0) [IrVar n, irx])
 closureConvert (App _ f x)           = do irf <- closureConvert f
                                           irx <- closureConvert x
                                           clo <- fresh "clo"

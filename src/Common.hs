@@ -40,13 +40,11 @@ infixl 1 |>
 (|>) :: a -> (a -> b) -> b
 x |> f = f x
 
--- wordsWhen     :: (Char -> Bool) -> String -> [String]
--- wordsWhen p s =  case dropWhile p s of
---                       "" -> []
---                       s' -> w : wordsWhen p s''
---                             where (w, s'') = break p s'
-
 dropExtension :: String -> String
 dropExtension (x:xs) = case x of
                         '.' -> []
                         _   -> x: dropExtension xs
+
+-- Se agregan nombres reservados para permitir BinaryOps sin aplicar
+reservedName = "__res_var__"
+reservedName2 = "__res_var_2__"

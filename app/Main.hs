@@ -118,9 +118,12 @@ typeCheckFile f = do
 -- Bytecompile
 byteCompileFile :: MonadPCF m => FilePath -> m ()
 byteCompileFile f = do
-    decls <- openFile f
-    mapM_ handleDecl decls
-    term <- declsToTerm decls
+    sDecls <- openFile f
+    -- type check
+    decls <- catMaybes <$> mapM desugarDecl sDecls
+    let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
+    mapM_ tcDecl declTerms
+    term <- declsToTerm sDecls
     bytecode <- bytecompileModule term
     let outputFile = dropExtension (reverse(dropWhile isSpace (reverse f))) ++ ".byte"
     printPCF ("Generando archivo compilado "++outputFile++"..."++show bytecode)
@@ -159,37 +162,6 @@ openFile f = do
                          return "")
     parseIO filename program x
 
--- Closurecompile
-closureCompileFiles :: MonadPCF m => [FilePath] -> m ()
-closureCompileFiles []     = return ()
-closureCompileFiles (x:xs) = do
-        closureCompileFile x
-        closureCompileFiles xs
-
-closureCompileFile :: MonadPCF m => FilePath -> m ()
-closureCompileFile f = do
-    printPCF ("Abriendo "++f++"...")
-    let filename = reverse(dropWhile isSpace (reverse f))
-    x <- liftIO $ catch (readFile filename)
-               (\e -> do let err = show (e :: IOException)
-                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
-                         return "")
-    sDecls <- parseIO filename program x
-    mapM_ handleDecl sDecls
-    decls <- mapM desugarDecl sDecls
-    let declTerms = map (\(Decl p n b) -> Decl p n (elab' b)) decls
-    -- TODO: borrar print
-    printPCF ("Declaraciones pre CC\n" ++ show declTerms)
-    mapM_ (\x-> printPCF (">> " ++ show x)) (runCC declTerms)
-    printPCF (show (runCanon (runCC declTerms)))
-    let llvm = codegen (runCanon (runCC declTerms))
-    let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
-    liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
-    liftIO $ system commandline
-    liftIO $ system "./prog"
-    return ()
-
-
 declsToTerm :: MonadPCF m => [SDecl SNTerm] -> m SNTerm
 declsToTerm (SDLet p n bs ty b:xs) = case xs of
                                       [] -> return (SLet p n bs ty b (SV p n))
@@ -199,6 +171,7 @@ declsToTerm (SDRec p n bs ty b:xs) = case xs of
                                       [] -> return (SRec p n bs ty b (SV p n))
                                       _  -> do ts <- declsToTerm xs
                                                return (SRec p n bs ty b ts)
+declsToTerm (SDType p n ty :xs) = declsToTerm xs
 declsToTerm (x:_) = do failPCF $ "Declaración invalida "++ show x
 
 ------------------------------------------
